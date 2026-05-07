@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>트윈테일의 하루</title>
+    <style>
+        /* 모바일 UI 3:5 비율 세팅 */
+        body {
+            margin: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Malgun Gothic', sans-serif;
+        }
+        #game-container {
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 3 / 5;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+        }
+        .active {
+            display: flex;
+        }
+        
+        /* 첫 화면 */
+        #start-screen {
+            justify-content: center;
+            align-items: center;
+            background-color: #ffe6e6;
+        }
+        #start-screen h1 { font-size: 24px; color: #ff6b81; }
+        
+        /* 게임 화면 */
+        #log-window {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            border-bottom: 2px solid #ddd;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .log-entry {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed #ccc;
+        }
+        #control-panel {
+            height: 120px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            background-color: #fff;
+        }
+        .btn-main {
+            grid-column: 1 / 3;
+            background-color: #ff6b81;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-sub {
+            background-color: #576574;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        /* 스탯(버그체크) 창 */
+        #stat-window {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0,0,0,0.9);
+            color: #00ff00;
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        #stat-window.active { display: block; }
+        .close-stat {
+            position: absolute;
+            top: 10px; right: 10px;
+            background: red; color: white; border: none; padding: 5px 10px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="start-screen" class="screen active">
+        <h1>트윈테일의 하루</h1>
+        <button id="btn-start" style="padding: 15px 30px; font-size: 18px; border:none; background:#ff6b81; color:white; border-radius:10px; cursor:pointer;">게임 시작</button>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div id="log-window"></div>
+        <div id="control-panel">
+            <button id="btn-event" class="btn-main">오늘은 무슨 일이 있었지?</button>
+            <button id="btn-exit" class="btn-sub">종료 (리셋)</button>
+            <button id="btn-stat" class="btn-sub">스탯/로그 확인</button>
+        </div>
+    </div>
+
+    <div id="stat-window">
+        <button id="btn-close-stat" class="close-stat">닫기</button>
+        <h2>[시스템 디버그 로그]</h2>
+        <div id="debug-content">데이터 대기중...</div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 1. 데이터 베이스 (여기에 예시를 추가하세요)
+    // ==========================================
+    const namePool = ["바그너", "퓔러", "소프나", "하이디", "지그문트", "로너", "할리", "도동파", "도로시", "스완", "막시무스"];
+    const globalTraits = ["1학년", "2학년"];
+    const specificTraits = [
+        { name: "황태자", mood: 50, love: 20 },
+        { name: "학생회장", mood: 40, love: 30 },
+        { name: "5년차 유급생", mood: 10, love: 70 },
+        { name: "자칭 위대한 기사", mood: 80, love: 80 },
+        { name: "메이드병 도진 백작영애", mood: 40, love: 0 }
+    ];
+
+    // 이벤트 풀 (원인)
+    const events = [
+        { text: "보던 신문에 비둘기 똥을 맞아" },
+        // 내용 추가: { text: "길에서 100원을 주워" },
+    ];
+
+    // 느낌 풀 (1차 판정 결과)
+    const feelings = {
+        loveSuccess: ["환희에 차올라"], // 내용 추가: "운명적인 사랑을 느끼며",
+        moodSuccess: ["기분이 상쾌해져"],
+        moodFail: ["깊은 빡침을 느끼며"]
+    };
+
+    // 행동 풀 (느낌에 따른 행동)
+    const actions = {
+        love: ["고백을 했습니다."], // 내용 추가: "윙크를 날렸습니다.",
+        moodGood: ["덕담을 건넸습니다."],
+        moodBad: ["다짜고짜 화풀이를 했습니다."]
+    };
+
+    // 반응 풀 (2차 판정 결과)
+    const reactions = {
+        success: ["기뻐하며 받아주었습니다."], // 내용 추가: "얼굴을 붉히며 부끄러워했습니다.",
+        fail: ["단칼에 거절했습니다."]
+    };
+
+    // ==========================================
+    // 2. 게임 상태 및 유틸리티 함수
+    // ==========================================
+    let currentNPCs = [];
+    let debugLog = "";
+
+    // 한국어 조사 처리 함수 (은/는, 이/가, 을/를, 에게)
+    function addJosa(word, josaType) {
+        const hasJongsung = (word.charCodeAt(word.length - 1) - 0xac00) % 28 > 0;
+        if (josaType === '은/는') return word + (hasJongsung ? '은' : '는');
+        if (josaType === '이/가') return word + (hasJongsung ? '이' : '가');
+        if (josaType === '을/를') return word + (hasJongsung ? '을' : '를');
+        if (josaType === '에게') return word + '에게'; // '에게'는 받침 상관없음
+        return word;
+    }
+
+    // 배열에서 랜덤 요소 뽑기
+    function pickRandom(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    // ==========================================
+    // 3. 게임 핵심 로직
+    // ==========================================
+    
+    // 게임 초기화 (NPC 3명 생성)
+    function initGame() {
+        currentNPCs = [];
+        let names = [...namePool].sort(() => 0.5 - Math.random()).slice(0, 3);
+        let sTraits = [...specificTraits].sort(() => 0.5 - Math.random()).slice(0, 3);
+
+        for (let i = 0; i < 3; i++) {
+            currentNPCs.push({
+                name: names[i],
+                gTrait: pickRandom(globalTraits),
+                sTrait: sTraits[i].name,
+                mood: sTraits[i].mood,
+                love: sTraits[i].love
+            });
+        }
+        
+        document.getElementById('log-window').innerHTML = "<div class='log-entry'><b>[시스템]</b> 게임이 시작되었습니다. 3명의 캐릭터가 생성되었습니다.</div>";
+        debugLog = "<b>[현재 NPC 상태]</b><br>" + JSON.stringify(currentNPCs, null, 2) + "<br><br>";
+        updateDebugWindow();
+        
+        document.getElementById('start-screen').classList.remove('active');
+        document.getElementById('game-screen').classList.add('active');
+    }
+
+    // 이벤트 발생 버튼 클릭 시
+    function triggerEvent() {
+        // 1. 행위자와 대상자 선정
+        let shuffled = [...currentNPCs].sort(() => 0.5 - Math.random());
+        let actor = shuffled[0];
+        let target = shuffled[1];
+
+        // 2. 이벤트 뽑기
+        let evt = pickRandom(events);
+
+        // 3. 1차 판정 (행위자의 느낌)
+        // 개연성 파괴 로직: 사랑 주사위를 먼저 굴리고, 실패하면 기분 주사위를 굴림.
+        let loveRoll = Math.floor(Math.random() * 100) + 1;
+        let moodRoll = Math.floor(Math.random() * 100) + 1;
+        
+        let feelingType, actionType;
+        let actorRollText = `[행위자 ${actor.name} 판정] Love 주사위:${loveRoll} (기준:${actor.love}) / Mood 주사위:${moodRoll} (기준:${actor.mood})<br>`;
+
+        if (loveRoll <= actor.love) {
+            feelingType = "loveSuccess";
+            actionType = "love";
+            actorRollText += "-> <b>사랑 판정 성공!</b> 뜬금없이 사랑에 빠짐.<br>";
+        } else if (moodRoll <= actor.mood) {
+            feelingType = "moodSuccess";
+            actionType = "moodGood";
+            actorRollText += "-> <b>기분 판정 성공!</b> 기분이 좋아짐.<br>";
+        } else {
+            feelingType = "moodFail";
+            actionType = "moodBad";
+            actorRollText += "-> <b>기분 판정 실패!</b> 화가 남.<br>";
+        }
+
+        let feeling = pickRandom(feelings[feelingType]);
+        let action = pickRandom(actions[actionType]);
+
+        // 4. 2차 판정 (대상자의 반응)
+        // 대상자는 자신을 향한 행동이 사랑 관련인지, 기분 관련인지에 따라 다른 스탯으로 저항(판정)함.
+        let targetRoll = Math.floor(Math.random() * 100) + 1;
+        let reactionType;
+        let targetRollText = `[대상자 ${target.name} 판정] `;
+
+        if (actionType === "love") {
+            targetRollText += `Love 주사위:${targetRoll} (기준:${target.love})<br>`;
+            if (targetRoll <= target.love) {
+                reactionType = "success"; targetRollText += "-> <b>반응 성공 (받아줌)</b><br>";
+            } else {
+                reactionType = "fail"; targetRollText += "-> <b>반응 실패 (거절함)</b><br>";
+            }
+        } else {
+            targetRollText += `Mood 주사위:${targetRoll} (기준:${target.mood})<br>`;
+            if (targetRoll <= target.mood) {
+                reactionType = "success"; targetRollText += "-> <b>반응 성공 (긍정적)</b><br>";
+            } else {
+                reactionType = "fail"; targetRollText += "-> <b>반응 실패 (부정적)</b><br>";
+            }
+        }
+
+        let reaction = pickRandom(reactions[reactionType]);
+
+        // 5. 로그 조립 (조사 처리 적용)
+        let logHTML = `
+            <div class='log-entry'>
+                [${actor.sTrait}]이자 [${actor.gTrait}]인 <b>${addJosa(actor.name, '이/가')}</b> ${evt.text}, ${feeling} 
+                <b>${addJosa(target.name, '에게')}</b> ${action}<br><br>
+                그러자 [${target.sTrait}] <b>${addJosa(target.name, '은/는')}</b> ${reaction}
+            </div>
+        `;
+
+        // 6. 화면 출력 및 디버그 기록
+        const logWindow = document.getElementById('log-window');
+        logWindow.insertAdjacentHTML('afterbegin', logHTML); // 최신 로그가 위로 오게
+        
+        debugLog = "-----------------------<br>" + actorRollText + targetRollText + debugLog;
+        updateDebugWindow();
+    }
+
+    function updateDebugWindow() {
+        document.getElementById('debug-content').innerHTML = debugLog;
+    }
+
+    // ==========================================
+    // 4. 이벤트 리스너 등록
+    // ==========================================
+    document.getElementById('btn-start').addEventListener('click', initGame);
+    
+    document.getElementById('btn-event').addEventListener('click', triggerEvent);
+    
+    document.getElementById('btn-exit').addEventListener('click', () => {
+        document.getElementById('game-screen').classList.remove('active');
+        document.getElementById('start-screen').classList.add('active');
+        document.getElementById('log-window').innerHTML = ''; // 로그 초기화
+    });
+
+    document.getElementById('btn-stat').addEventListener('click', () => {
+        document.getElementById('stat-window').classList.add('active');
+    });
+
+    document.getElementById('btn-close-stat').addEventListener('click', () => {
+        document.getElementById('stat-window').classList.remove('active');
+    });
+
+</script>
+</body>
+</html>
