@@ -2,323 +2,637 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>트윈테일의 하루</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>아포칼립스 시뮬레이터 (UI & Character)-alpha-0.07</title>
     <style>
-        /* 모바일 UI 3:5 비율 세팅 */
+        * { box-sizing: border-box; touch-action: manipulation; }
         body {
-            margin: 0;
-            background-color: #f0f0f0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: 'Malgun Gothic', sans-serif;
+            margin: 0; background-color: #222; display: flex; 
+            justify-content: center; align-items: center; height: 100vh;
+            font-family: 'Malgun Gothic', sans-serif; overflow: hidden;
         }
-        #game-container {
-            width: 100%;
-            max-width: 400px;
-            aspect-ratio: 3 / 5;
-            background-color: #fff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .screen {
-            display: none;
-            width: 100%;
-            height: 100%;
-            flex-direction: column;
-        }
-        .active {
-            display: flex;
-        }
-        
-        /* 첫 화면 */
-        #start-screen {
-            justify-content: center;
-            align-items: center;
-            background-color: #ffe6e6;
-        }
-        #start-screen h1 { font-size: 24px; color: #ff6b81; }
-        
-        /* 게임 화면 */
-        #log-window {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            background-color: #f9f9f9;
-            border-bottom: 2px solid #ddd;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        .log-entry {
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px dashed #ccc;
-        }
-        #control-panel {
-            height: 120px;
-            padding: 10px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr;
-            gap: 10px;
-            background-color: #fff;
-        }
-        .btn-main {
-            grid-column: 1 / 3;
-            background-color: #ff6b81;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .btn-sub {
-            background-color: #576574;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
+        #app {
+            width: 100%; max-width: 450px; aspect-ratio: 3 / 5; /* 모바일에 맞춘 세로형 */
+            background-color: #fff; position: relative; display: flex; flex-direction: column;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5); overflow: hidden;
         }
 
-        /* 스탯(버그체크) 창 */
-        #stat-window {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(0,0,0,0.9);
-            color: #00ff00;
-            padding: 20px;
-            overflow-y: auto;
-            display: none;
-            font-family: monospace;
-            font-size: 13px;
+        /* 화면 전환용 클래스 */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; background: #fff; z-index: 10;
         }
-        #stat-window.active { display: block; }
-        .close-stat {
-            position: absolute;
-            top: 10px; right: 10px;
-            background: red; color: white; border: none; padding: 5px 10px; cursor: pointer;
+        .hidden { display: none !important; }
+
+        /* 타이틀 & 인터미션 화면 */
+        .center-screen {
+            justify-content: center; align-items: center; text-align: center; background: #2d3436; color: white;
+        }
+        .title { font-size: 28px; font-weight: bold; margin-bottom: 10px; color: #f1c40f; }
+        .subtitle { font-size: 14px; margin-bottom: 40px; color: #bdc3c7; }
+        .btn-large {
+            padding: 15px 40px; font-size: 18px; font-weight: bold; color: #222;
+            background: #f1c40f; border: none; border-radius: 8px; cursor: pointer;
+            box-shadow: 0 4px #d4ac0d; transition: transform 0.1s;
+        }
+        .btn-large:active { transform: translateY(4px); box-shadow: 0 0 #d4ac0d; }
+
+        /* 게임 화면 HUD */
+        #hud {
+            height: 60px; background: #333; color: white;
+            display: flex; flex-direction: row; justify-content: space-between; align-items: center;
+            padding: 0 20px; font-size: 14px; font-weight: bold;
+        }
+
+        /* 10x10 게임 뷰포트 (중상단 배치) */
+        #viewport-container {
+            flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            background: #87CEEB; transition: background-color 2.0s ease; gap: 10px;
+        }
+        #game-board {
+            width: 350px; height: 350px; background: #e0e0e0; position: relative;
+            display: grid; border: 4px solid #222;
+            grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(10, 1fr);
+        }
+        
+        .tile {
+            border: 0.1px solid rgba(0,0,0,0.05);
+            display: flex; justify-content: center; align-items: center; 
+            font-size: 10px; font-weight: bold; color: gold; text-align: center; line-height: 1.1;
+        }
+        .tile-empty { background-color: #f0f0f0; } 
+        .tile-mountain { background-color: #cd6133; } 
+        .tile-river { background-color: #7ed6df; } 
+        .tile-forest { background-color: #badc58; } 
+        .tile-road { background-color: #f0f0f0; } 
+        .tile-building { background-color: #7f8c8d; }
+        .tile-out { background-color: #000; }
+
+        .char { position: absolute; font-size: 24px; z-index: 20; transition: all 0.15s linear; }
+
+        #character-status {
+            width: 350px; background: rgba(30, 30, 30, 0.85); color: white; 
+            padding: 12px; border-radius: 8px; font-size: 13px; 
+            border: 2px solid #222; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+        /* 하단 컨트롤 버튼 영역 */
+        #controls {
+            height: 90px; background: #eee; display: flex; justify-content: space-around; align-items: center;
+            padding: 0 10px; border-top: 2px solid #ccc;
+        }
+        .btn-control {
+            flex: 1; margin: 0 5px; padding: 15px 0; font-size: 14px; font-weight: bold;
+            background: #57606f; color: white; border: none; border-radius: 8px; cursor: pointer;
+            box-shadow: 0 4px #2f3542;
+        }
+        .btn-control:active { transform: translateY(2px); box-shadow: 0 2px #2f3542; }
+        .btn-pause.paused { background: #e1b12c; box-shadow: 0 4px #b38b22; color: #222; }
+
+        /* 모달 팝업 (일시정지 & 지도) */
+        .modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal-box {
+            background: white; padding: 20px; border-radius: 12px; width: 85%;
+            text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
+        .btn-close {
+            margin-top: 15px; padding: 10px 20px; background: #e74c3c; color: white;
+            border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+        }
+        
+        /* 미니맵 캔버스 */
+        #minimap-canvas {
+            background: #000; border: 2px solid #333; max-width: 100%; image-rendering: pixelated;
         }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <div id="start-screen" class="screen active">
-        <h1>트윈테일의 하루</h1>
-        <button id="btn-start" style="padding: 15px 30px; font-size: 18px; border:none; background:#ff6b81; color:white; border-radius:10px; cursor:pointer;">게임 시작</button>
+<div id="app">
+    <div id="screen-start" class="screen center-screen">
+        <div class="title">아포칼립스 샌드박스</div>
+        <div class="subtitle">v0.1 - 첫 번째 생존자</div>
+        <button class="btn-large" onclick="changeScreen('screen-intermission')">게임 준비</button>
     </div>
 
-    <div id="game-screen" class="screen">
-        <div id="log-window"></div>
-        <div id="control-panel">
-            <button id="btn-event" class="btn-main">오늘은 무슨 일이 있었지?</button>
-            <button id="btn-exit" class="btn-sub">종료 (리셋)</button>
-            <button id="btn-stat" class="btn-sub">스탯/로그 확인</button>
+    <div id="screen-intermission" class="screen center-screen hidden">
+        <div class="title">세계 생성 중...</div>
+        <div class="subtitle">새로운 80x80 지형을 구축합니다.</div>
+        <button class="btn-large" onclick="startSimulation()">시뮬레이션 시작</button>
+    </div>
+
+    <div id="screen-game" class="screen hidden">
+        <div id="hud">
+            <div>Day <span id="hud-day" style="color: #4bcffa;">1</span></div>
+            <div>진행 턴: <span id="hud-turn" style="color: #f1c40f;">0</span></div>
+            <div><span id="hud-time" style="color: #badc58;">06:00</span></div>
+        </div>
+        <div id="viewport-container">
+            <div id="game-board"></div>
+            <div id="character-status">
+                <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #f1c40f;">🥰 주인공 상태</div>
+                <div class="stat-grid">
+                    <span>❤️ HP: <span id="stat-hp">50</span>/50</span>
+                    <span>⚔️ 공격: <span id="stat-atk">1</span></span>
+                    <span>🍖 허기: <span id="stat-hunger">0</span></span>
+                    <span>💤 피로: <span id="stat-fatigue">0</span></span>
+                    <span style="grid-column: span 2;">🎒 가방(식량): <span id="stat-bag">0</span>/4</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="controls">
+            <button class="btn-control" onclick="goHome()">처음으로</button>
+            <button id="btn-pause" class="btn-control btn-pause" onclick="togglePause()">일시정지</button>
+            <button class="btn-control" onclick="showMap()">전체 지도</button>
         </div>
     </div>
 
-    <div id="stat-window">
-        <button id="btn-close-stat" class="close-stat">닫기</button>
-        <h2>[시스템 디버그 로그]</h2>
-        <div id="debug-content">데이터 대기중...</div>
+    <div id="modal-pause" class="modal-overlay hidden">
+        <div class="modal-box">
+            <div class="modal-title">시뮬레이션 일시정지</div>
+            <div style="font-size: 14px; margin-bottom: 20px;">
+                현재 <strong id="popup-turn" style="color:#e1b12c; font-size: 18px;">0</strong> 턴 진행되었습니다.
+            </div>
+            <button class="btn-close" onclick="closePausePopup()">닫기</button>
+        </div>
+    </div>
+
+    <div id="modal-map" class="modal-overlay hidden">
+        <div class="modal-box" style="padding: 10px;">
+            <div class="modal-title" style="margin-bottom: 5px;">전체 위성 지도</div>
+            <canvas id="minimap-canvas" width="320" height="320"></canvas>
+            <div><button class="btn-close" onclick="closeMap()">지도 닫기</button></div>
+        </div>
     </div>
 </div>
 
 <script>
-    // ==========================================
-    // 1. 데이터 베이스 (여기에 예시를 추가하세요)
-    // ==========================================
-    const namePool = ["바그너", "퓔러", "소프나", "하이디", "지그문트", "로너", "할리", "도동파", "도로시", "스완", "막시무스"];
-    const globalTraits = ["1학년", "2학년"];
-    const specificTraits = [
-        { name: "황태자", mood: 50, love: 20 },
-        { name: "학생회장", mood: 40, love: 30 },
-        { name: "5년차 유급생", mood: 10, love: 70 },
-        { name: "자칭 위대한 기사", mood: 80, love: 80 },
-        { name: "메이드병 도진 백작영애", mood: 40, love: 0 }
-    ];
+    const MAP_SIZE = 70;
+    const VIEW_SIZE = 10;
+    const TURN_DELAY = 400; // 0.4초 1턴
 
-    // 이벤트 풀 (원인)
-    const events = [
-        { text: "보던 신문에 비둘기 똥을 맞아" },
-        // 내용 추가: { text: "길에서 100원을 주워" },
-    ];
-
-    // 느낌 풀 (1차 판정 결과)
-    const feelings = {
-        loveSuccess: ["환희에 차올라"], // 내용 추가: "운명적인 사랑을 느끼며",
-        moodSuccess: ["기분이 상쾌해져"],
-        moodFail: ["깊은 빡침을 느끼며"]
-    };
-
-    // 행동 풀 (느낌에 따른 행동)
-    const actions = {
-        love: ["고백을 했습니다."], // 내용 추가: "윙크를 날렸습니다.",
-        moodGood: ["덕담을 건넸습니다."],
-        moodBad: ["다짜고짜 화풀이를 했습니다."]
-    };
-
-    // 반응 풀 (2차 판정 결과)
-    const reactions = {
-        success: ["기뻐하며 받아주었습니다."], // 내용 추가: "얼굴을 붉히며 부끄러워했습니다.",
-        fail: ["단칼에 거절했습니다."]
-    };
-
-    // ==========================================
-    // 2. 게임 상태 및 유틸리티 함수
-    // ==========================================
-    let currentNPCs = [];
-    let debugLog = "";
-
-    // 한국어 조사 처리 함수 (은/는, 이/가, 을/를, 에게)
-    function addJosa(word, josaType) {
-        const hasJongsung = (word.charCodeAt(word.length - 1) - 0xac00) % 28 > 0;
-        if (josaType === '은/는') return word + (hasJongsung ? '은' : '는');
-        if (josaType === '이/가') return word + (hasJongsung ? '이' : '가');
-        if (josaType === '을/를') return word + (hasJongsung ? '을' : '를');
-        if (josaType === '에게') return word + '에게'; // '에게'는 받침 상관없음
-        return word;
-    }
-
-    // 배열에서 랜덤 요소 뽑기
-    function pickRandom(arr) {
-        return arr[Math.floor(Math.random() * arr.length)];
-    }
-
-    // ==========================================
-    // 3. 게임 핵심 로직
-    // ==========================================
+    let mapGrid = [];
+    let camera = { x: 0, y: 0 };
+    let character = { x: 0, y: 0, emoji: '🥰', stats: createEntityStats(50, 1, 4) };
     
-    // 게임 초기화 (NPC 3명 생성)
-    function initGame() {
-        currentNPCs = [];
-        let names = [...namePool].sort(() => 0.5 - Math.random()).slice(0, 3);
-        let sTraits = [...specificTraits].sort(() => 0.5 - Math.random()).slice(0, 3);
+    let turnCount = 0;
+    let gameTimer = null;
+    let isPaused = false;
 
-        for (let i = 0; i < 3; i++) {
-            currentNPCs.push({
-                name: names[i],
-                gTrait: pickRandom(globalTraits),
-                sTrait: sTraits[i].name,
-                mood: sTraits[i].mood,
-                love: sTraits[i].love
-            });
-        }
-        
-        document.getElementById('log-window').innerHTML = "<div class='log-entry'><b>[시스템]</b> 게임이 시작되었습니다. 3명의 캐릭터가 생성되었습니다.</div>";
-        debugLog = "<b>[현재 NPC 상태]</b><br>" + JSON.stringify(currentNPCs, null, 2) + "<br><br>";
-        updateDebugWindow();
-        
-        document.getElementById('start-screen').classList.remove('active');
-        document.getElementById('game-screen').classList.add('active');
+    // [추가] 건물별 자원 설정 (하드코딩 방지용 Config)
+    const BUILDING_RESOURCES = {
+        '아파트': { food: [7, 9], sleep: 2 },
+        '상점': { food: [3, 9], sleep: 1 },
+        '대형마트': { food: [11, 20], sleep: 1 },
+        '교회': { food: [0, 5], sleep: 2 },
+        '주택': { food: [5, 7], sleep: 1 },
+        '학교': { food: [3, 15], sleep: 1 }
+    };
+
+    // [추가] 캐릭터 스탯 팩토리 함수 (나중에 다른 NPC 만들 때 재사용 가능)
+    function createEntityStats(hp, atk, maxWeight) {
+        return {
+            hp: hp, maxHp: hp,
+            atk: atk,
+            hunger: 0, maxHunger: 100, // 최소 -1 처리 등은 나중에 로직에서 구현
+            fatigue: 0, maxFatigue: 100,
+            weightLimit: maxWeight,
+            inventory: { food: 0 } // 현재 들고 있는 식량
+        };
     }
 
-    // 이벤트 발생 버튼 클릭 시
-    function triggerEvent() {
-        // 1. 행위자와 대상자 선정
-        let shuffled = [...currentNPCs].sort(() => 0.5 - Math.random());
-        let actor = shuffled[0];
-        let target = shuffled[1];
+    // 프리팹 정의
+    const PREFABS = {
+        '아파트': [[0,0], [1,0], [0,1], [1,1]], 
+        '상점': [[0,0], [1,0], [0,1]], 
+        '대형마트': [[0,0], [1,0], [2,0], [0,1], [1,1], [2,1]], 
+        '교회': [[0,0], [0,1], [1,1], [0,2], [1,2], [2,2]],
+        '주택': [[0,0], [1,0]], 
+    };
+// [수정] 3x3 블록 3개가 합쳐진 진짜 'ㄴ' 자 형태의 학교 (27칸)
+    let schoolPrefab = [];
+    for(let x=0; x<3; x++) for(let y=0; y<3; y++) schoolPrefab.push([x, y]); // 상단 블록
+    for(let x=0; x<3; x++) for(let y=3; y<6; y++) schoolPrefab.push([x, y]); // 코너(모서리) 블록
+    for(let x=3; x<6; x++) for(let y=3; y<6; y++) schoolPrefab.push([x, y]); // 우측 블록
+    PREFABS['학교'] = schoolPrefab;
 
-        // 2. 이벤트 뽑기
-        let evt = pickRandom(events);
+    // --- UI 및 상태 제어 ---
+    function changeScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+        document.getElementById(screenId).classList.remove('hidden');
+    }
 
-        // 3. 1차 판정 (행위자의 느낌)
-        // 개연성 파괴 로직: 사랑 주사위를 먼저 굴리고, 실패하면 기분 주사위를 굴림.
-        let loveRoll = Math.floor(Math.random() * 100) + 1;
-        let moodRoll = Math.floor(Math.random() * 100) + 1;
+    function goHome() {
+        stopTimer();
+        changeScreen('screen-start');
+    }
+
+    function startSimulation() {
+        changeScreen('screen-game');
+        turnCount = 0;
+        isPaused = false;
+        document.getElementById('btn-pause').innerText = "일시정지";
+        document.getElementById('btn-pause').classList.remove('paused');
         
-        let feelingType, actionType;
-        let actorRollText = `[행위자 ${actor.name} 판정] Love 주사위:${loveRoll} (기준:${actor.love}) / Mood 주사위:${moodRoll} (기준:${actor.mood})<br>`;
+        initDisplay();
+        generateMap();
+        spawnCharacter();
+        
+        startTimer();
+        render();
+    }
 
-        if (loveRoll <= actor.love) {
-            feelingType = "loveSuccess";
-            actionType = "love";
-            actorRollText += "-> <b>사랑 판정 성공!</b> 뜬금없이 사랑에 빠짐.<br>";
-        } else if (moodRoll <= actor.mood) {
-            feelingType = "moodSuccess";
-            actionType = "moodGood";
-            actorRollText += "-> <b>기분 판정 성공!</b> 기분이 좋아짐.<br>";
+    function startTimer() {
+        if(gameTimer) clearInterval(gameTimer);
+        gameTimer = setInterval(gameTick, TURN_DELAY);
+    }
+
+    function stopTimer() {
+        clearInterval(gameTimer);
+        gameTimer = null;
+    }
+
+    function togglePause() {
+        isPaused = !isPaused;
+        const btn = document.getElementById('btn-pause');
+        if (isPaused) {
+            stopTimer();
+            btn.innerText = "이어서 시작";
+            btn.classList.add('paused');
+            document.getElementById('popup-turn').innerText = turnCount;
+            document.getElementById('modal-pause').classList.remove('hidden');
         } else {
-            feelingType = "moodFail";
-            actionType = "moodBad";
-            actorRollText += "-> <b>기분 판정 실패!</b> 화가 남.<br>";
+            startTimer();
+            btn.innerText = "일시정지";
+            btn.classList.remove('paused');
+            document.getElementById('modal-pause').classList.add('hidden');
         }
+    }
 
-        let feeling = pickRandom(feelings[feelingType]);
-        let action = pickRandom(actions[actionType]);
+    function closePausePopup() {
+        // 팝업만 닫고 일시정지 상태는 유지
+        document.getElementById('modal-pause').classList.add('hidden');
+    }
 
-        // 4. 2차 판정 (대상자의 반응)
-        // 대상자는 자신을 향한 행동이 사랑 관련인지, 기분 관련인지에 따라 다른 스탯으로 저항(판정)함.
-        let targetRoll = Math.floor(Math.random() * 100) + 1;
-        let reactionType;
-        let targetRollText = `[대상자 ${target.name} 판정] `;
+// --- 미니맵 캔버스 렌더링 ---
+    function showMap() {
+        document.getElementById('modal-map').classList.remove('hidden');
+        const canvas = document.getElementById('minimap-canvas');
+        const ctx = canvas.getContext('2d');
+        const tileSize = 4; 
+        
+        // [수정] 맵 사이즈(70)에 맞춰 캔버스 크기를 동적으로 조절합니다.
+        canvas.width = MAP_SIZE * tileSize;
+        canvas.height = MAP_SIZE * tileSize;
 
-        if (actionType === "love") {
-            targetRollText += `Love 주사위:${targetRoll} (기준:${target.love})<br>`;
-            if (targetRoll <= target.love) {
-                reactionType = "success"; targetRollText += "-> <b>반응 성공 (받아줌)</b><br>";
-            } else {
-                reactionType = "fail"; targetRollText += "-> <b>반응 실패 (거절함)</b><br>";
-            }
-        } else {
-            targetRollText += `Mood 주사위:${targetRoll} (기준:${target.mood})<br>`;
-            if (targetRoll <= target.mood) {
-                reactionType = "success"; targetRollText += "-> <b>반응 성공 (긍정적)</b><br>";
-            } else {
-                reactionType = "fail"; targetRollText += "-> <b>반응 실패 (부정적)</b><br>";
+        // 색상 매핑
+        const colors = {
+            'empty': '#f0f0f0', 'mountain': '#cd6133', 'river': '#7ed6df',
+            'forest': '#badc58', 'road': '#576574', 'building': '#7f8c8d'
+        };
+
+        for (let y = 0; y < MAP_SIZE; y++) {
+            for (let x = 0; x < MAP_SIZE; x++) {
+                ctx.fillStyle = colors[mapGrid[y][x].type] || '#000';
+                ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
             }
         }
-
-        let reaction = pickRandom(reactions[reactionType]);
-
-        // 5. 로그 조립 (조사 처리 적용)
-        let logHTML = `
-            <div class='log-entry'>
-                [${actor.sTrait}]이자 [${actor.gTrait}]인 <b>${addJosa(actor.name, '이/가')}</b> ${evt.text}, ${feeling} 
-                <b>${addJosa(target.name, '에게')}</b> ${action}<br><br>
-                그러자 [${target.sTrait}] <b>${addJosa(target.name, '은/는')}</b> ${reaction}
-            </div>
-        `;
-
-        // 6. 화면 출력 및 디버그 기록
-        const logWindow = document.getElementById('log-window');
-        logWindow.insertAdjacentHTML('afterbegin', logHTML); // 최신 로그가 위로 오게
         
-        debugLog = "-----------------------<br>" + actorRollText + targetRollText + debugLog;
-        updateDebugWindow();
+        // 캐릭터 위치 (노란색)
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath();
+        ctx.arc(character.x * tileSize + 2, character.y * tileSize + 2, 4, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    
+    function closeMap() {
+        document.getElementById('modal-map').classList.add('hidden');
     }
 
-    function updateDebugWindow() {
-        document.getElementById('debug-content').innerHTML = debugLog;
+// --- 게임 루프 (턴 처리) ---
+    function gameTick() {
+        turnCount++;
+        
+        updateDayNightCycle(); // 시간에 따른 연출 업데이트
+        moveCharacter();
+        updateCamera();
+        updateStatusUI();
+
+        render();
     }
 
-    // ==========================================
-    // 4. 이벤트 리스너 등록
-    // ==========================================
-    document.getElementById('btn-start').addEventListener('click', initGame);
-    
-    document.getElementById('btn-event').addEventListener('click', triggerEvent);
-    
-    document.getElementById('btn-exit').addEventListener('click', () => {
-        document.getElementById('game-screen').classList.remove('active');
-        document.getElementById('start-screen').classList.add('active');
-        document.getElementById('log-window').innerHTML = ''; // 로그 초기화
-    });
+    function updateDayNightCycle() {
+        // 120턴 = 1일
+        let day = Math.floor(turnCount / 120) + 1;
+        let turnInDay = turnCount % 120; // 0 ~ 119
+        
+        // 시각 계산: 120턴이 24시간이므로 5턴당 1시간. 아침 6시(0턴) 시작.
+        let hour = 6 + Math.floor(turnInDay / 5);
+        if (hour >= 24) hour -= 24;
+        
+        // 요구사항: 2시간 단위로만 표시 (짝수 시간으로 내림)
+        let displayHour = Math.floor(hour / 2) * 2;
+        let timeStr = `${displayHour.toString().padStart(2, '0')}:00`;
 
-    document.getElementById('btn-stat').addEventListener('click', () => {
-        document.getElementById('stat-window').classList.add('active');
-    });
+        // 배경색 결정 (4단계)
+        let bgColor = "#87CEEB"; // 오전 (기본 하늘색)
+        if (turnInDay >= 90) { 
+            bgColor = "#2c3e50"; // 밤 (어두운 남색)
+        } else if (turnInDay >= 60) { 
+            bgColor = "#e67e22"; // 저녁 (노을빛)
+        } else if (turnInDay >= 30) { 
+            bgColor = "#f1c40f"; // 오후 (밝은 햇빛)
+        }
 
-    document.getElementById('btn-close-stat').addEventListener('click', () => {
-        document.getElementById('stat-window').classList.remove('active');
-    });
+        // UI 갱신
+        document.getElementById('hud-day').innerText = day;
+        document.getElementById('hud-turn').innerText = turnCount;
+        document.getElementById('hud-time').innerText = timeStr;
+        document.getElementById('viewport-container').style.backgroundColor = bgColor;
+    }
+
+    function moveCharacter() {
+        let dirs = [[0,1], [0,-1], [1,0], [-1,0]];
+        dirs.sort(() => Math.random() - 0.5); // 랜덤 섞기
+
+        for (let d of dirs) {
+            let nx = character.x + d[0];
+            let ny = character.y + d[1];
+            
+            // 맵 밖으로 나가거나 산/강이면 이동 불가
+            if (nx >= 0 && nx < MAP_SIZE && ny >= 0 && ny < MAP_SIZE) {
+                let type = mapGrid[ny][nx].type;
+                if (type !== 'mountain' && type !== 'river') {
+                    character.x = nx;
+                    character.y = ny;
+                    break; // 한 칸 이동 후 종료
+                }
+            }
+        }
+    }
+
+    function updateCamera() {
+        // 카메라를 캐릭터 중앙에 맞추되, 맵 경계를 벗어나지 않도록 보정
+        let half = Math.floor(VIEW_SIZE / 2);
+        camera.x = Math.max(0, Math.min(MAP_SIZE - VIEW_SIZE, character.x - half));
+        camera.y = Math.max(0, Math.min(MAP_SIZE - VIEW_SIZE, character.y - half));
+    }
+
+    // --- 맵 생성 및 렌더링 로직 (이전 버전 이식) ---
+    function initDisplay() {
+        const board = document.getElementById('game-board');
+        board.innerHTML = '';
+        for (let y = 0; y < VIEW_SIZE; y++) {
+            for (let x = 0; x < VIEW_SIZE; x++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.id = `tile-${x}-${y}`;
+                board.appendChild(tile);
+            }
+        }
+    }
+
+    function generateMap() {
+        mapGrid = Array.from(Array(MAP_SIZE), () => Array(MAP_SIZE).fill({ type: 'empty', name: '' }));
+        
+        generateBlobs('mountain', 4, 150);
+        generateRiver();
+        generateRoads(40, 40, 5); 
+        generateBuildings();
+        generateBlobs('forest', 20, 40);
+    }
+
+    function spawnCharacter() {
+        // 랜덤으로 빈 땅이나 길 찾기
+        while(true) {
+            let rx = Math.floor(Math.random() * MAP_SIZE);
+            let ry = Math.floor(Math.random() * MAP_SIZE);
+            let type = mapGrid[ry][rx].type;
+            if (type === 'empty' || type === 'road') {
+                character.x = rx;
+                character.y = ry;
+                updateCamera();
+                break;
+            }
+        }
+    }
+
+// [수정] 맵 헬퍼 함수: 이제 텍스트(name)뿐만 아니라 객체(데이터)도 통째로 타일에 저장 가능
+    function setTile(x, y, type, extraData = {}) {
+        if (x >= 0 && x < MAP_SIZE && y >= 0 && y < MAP_SIZE) {
+            if (typeof extraData === 'string') {
+                mapGrid[y][x] = { type: type, name: extraData };
+            } else {
+                mapGrid[y][x] = { type: type, ...extraData };
+            }
+        }
+    }
+
+    function getTile(x, y) {
+        if (x >= 0 && x < MAP_SIZE && y >= 0 && y < MAP_SIZE) return mapGrid[y][x];
+        return { type: 'out', name: '' };
+    }
+
+    function generateBlobs(type, count, size) {
+        for (let i = 0; i < count; i++) {
+            let cx = Math.floor(Math.random() * MAP_SIZE), cy = Math.floor(Math.random() * MAP_SIZE);
+            if (type === 'mountain') {
+                cx = Math.random() < 0.5 ? Math.floor(Math.random() * 15) : MAP_SIZE - 1 - Math.floor(Math.random() * 15);
+                cy = Math.random() < 0.5 ? Math.floor(Math.random() * 15) : MAP_SIZE - 1 - Math.floor(Math.random() * 15);
+            }
+            let queue = [{x: cx, y: cy}], tilesPlaced = 0;
+            while (queue.length > 0 && tilesPlaced < size) {
+                let curr = queue.shift();
+                if (getTile(curr.x, curr.y).type === 'empty') {
+                    setTile(curr.x, curr.y, type); tilesPlaced++;
+                    let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(() => Math.random() - 0.5);
+                    for (let d of dirs) if (Math.random() < 0.7) queue.push({x: curr.x + d[0], y: curr.y + d[1]});
+                }
+            }
+        }
+    }
+
+function generateRiver() {
+        let edge = Math.floor(Math.random() * 4); // 0:북, 1:남, 2:서, 3:동
+        let x, y, dx = 0, dy = 0;
+        
+        // 맵 길이의 50% ~ 75% 정도만 흐르다 끊기게 설정 (단절 방지)
+        let maxLength = Math.floor(MAP_SIZE * (0.5 + Math.random() * 0.25)); 
+
+        // 상하좌우 중 출발점 및 방향 설정
+        if (edge === 0) { x = 20 + Math.floor(Math.random() * (MAP_SIZE - 40)); y = 0; dy = 1; }
+        else if (edge === 1) { x = 20 + Math.floor(Math.random() * (MAP_SIZE - 40)); y = MAP_SIZE - 1; dy = -1; }
+        else if (edge === 2) { x = 0; y = 20 + Math.floor(Math.random() * (MAP_SIZE - 40)); dx = 1; }
+        else if (edge === 3) { x = MAP_SIZE - 1; y = 20 + Math.floor(Math.random() * (MAP_SIZE - 40)); dx = -1; }
+
+        for (let i = 0; i < maxLength; i++) {
+            setTile(x, y, 'river');
+            if (dx === 0) setTile(x+1, y, 'river'); // 수직 강 폭
+            else setTile(x, y+1, 'river'); // 수평 강 폭
+
+            x += dx; y += dy;
+            
+            // 취객의 걸음 (비틀거리기)
+            let rand = Math.random();
+            if (dx === 0) { // 수직 이동 중 좌우 비틀기
+                if (rand < 0.3) x--; else if (rand > 0.7) x++;
+            } else { // 수평 이동 중 상하 비틀기
+                if (rand < 0.3) y--; else if (rand > 0.7) y++;
+            }
+            
+            // 맵 밖으로 나가버리면 중단
+            if (x < 0 || x >= MAP_SIZE || y < 0 || y >= MAP_SIZE) break;
+        }
+    }
+
+// [수정된 방사형 도로망 생성기]
+    function generateRoads(startX, startY, branches) {
+        let queue = [];
+        
+        // 1. 중앙에서 뻗어나가는 굵은 간선 도로 (수명 30)
+        for(let i = 0; i < branches; i++) {
+            let angle = (i * (Math.PI * 2) / branches) + (Math.random() * 0.5);
+            queue.push({ x: startX, y: startY, dx: Math.cos(angle), dy: Math.sin(angle), life: 30 });
+        }
+
+        while(queue.length > 0) {
+            let curr = queue.shift();
+            let cx = curr.x, cy = curr.y;
+
+            for(let step = 0; step < curr.life; step++) {
+                cx += curr.dx; 
+                cy += curr.dy;
+                let rx = Math.floor(cx), ry = Math.floor(cy);
+                
+                // 산이나 강을 만나면 도로 건설 중단
+                if (getTile(rx, ry).type === 'mountain' || getTile(rx, ry).type === 'river') break;
+                
+                setTile(rx, ry, 'road');
+                
+                // 2. [핵심 수정] 잔가지를 칠 때, 부모 수명의 절반만 물려줌 (무한 증식 방지)
+                if (Math.random() < 0.1 && curr.life > 10) {
+                    let newAngle = Math.random() * Math.PI * 2;
+                    let childLife = Math.floor(curr.life / 2); // 15, 7, 3... 으로 점점 줄어듦
+                    queue.push({ x: rx, y: ry, dx: Math.cos(newAngle), dy: Math.sin(newAngle), life: childLife });
+                }
+            }
+        }
+    }
+
+    function rotatePrefab(prefab) { return prefab.map(p => [-p[1], p[0]]); }
+
+// [수정] 건물 배치 시 자원(식량, 취침)을 계산해서 타일에 심어두기
+    function generateBuildings() {
+        const bTypes = Object.keys(PREFABS);
+        
+        for (let i = 0; i < 400; i++) { 
+            let rx = Math.floor(Math.random() * MAP_SIZE);
+            let ry = Math.floor(Math.random() * MAP_SIZE);
+            
+            let isNearRoad = [[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(rx+d[0], ry+d[1]).type === 'road');
+            let requireRoad = (i % 2 === 0);
+            
+            if (requireRoad && !isNearRoad) continue; 
+            if (!requireRoad && isNearRoad) continue; 
+
+            let bName = bTypes[Math.floor(Math.random() * bTypes.length)];
+            let prefab = PREFABS[bName];
+            for(let r=0; r<Math.floor(Math.random() * 4); r++) prefab = rotatePrefab(prefab);
+
+            let canPlace = true;
+            for (let p of prefab) { 
+                let tx = rx + p[0], ty = ry + p[1];
+                if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE || getTile(tx, ty).type !== 'empty') { 
+                    canPlace = false; break; 
+                } 
+            }
+
+            if (canPlace) {
+                // 건물을 지을 때 타일마다 자원을 계산해서 넣는 내부 함수
+                const placeBuildingTile = (bx, by, bName, isFirstTile) => {
+                    let resConfig = BUILDING_RESOURCES[bName] || { food: [0,0], sleep: 0 };
+                    // 지정된 최소~최대 식량 사이에서 무작위 값 추출
+                    let foodAmount = Math.floor(Math.random() * (resConfig.food[1] - resConfig.food[0] + 1)) + resConfig.food[0];
+                    
+                    setTile(bx, by, 'building', {
+                        name: isFirstTile ? bName : '', // 첫 타일에만 이름 표시용
+                        bName: bName, // 실제 건물 종류
+                        food: foodAmount,
+                        sleep: resConfig.sleep
+                    });
+                };
+
+                for (let j = 0; j < prefab.length; j++) {
+                    placeBuildingTile(rx + prefab[j][0], ry + prefab[j][1], bName, j === 0);
+                }
+                
+                if (bName === '아파트' && Math.random() < 0.7) {
+                    let shiftX = Math.random() < 0.5 ? 3 : -3, canPlace2 = true;
+                    for (let p of prefab) {
+                        let tx = rx+shiftX+p[0], ty = ry+p[1];
+                        if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE || getTile(tx, ty).type !== 'empty') canPlace2 = false;
+                    }
+                    if (canPlace2) {
+                        for (let j = 0; j < prefab.length; j++) {
+                            placeBuildingTile(rx + shiftX + prefab[j][0], ry + prefab[j][1], bName, j === 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function updateStatusUI() {
+        document.getElementById('stat-hp').innerText = character.stats.hp;
+        document.getElementById('stat-atk').innerText = character.stats.atk;
+        document.getElementById('stat-hunger').innerText = character.stats.hunger;
+        document.getElementById('stat-fatigue').innerText = character.stats.fatigue;
+        document.getElementById('stat-bag').innerText = character.stats.inventory.food;
+    }
+
+    function render() {
+        for (let y = 0; y < VIEW_SIZE; y++) {
+            for (let x = 0; x < VIEW_SIZE; x++) {
+                let mx = camera.x + x;
+                let my = camera.y + y;
+                
+                let el = document.getElementById(`tile-${x}-${y}`);
+                el.className = 'tile';
+                el.innerHTML = '';
+                
+                // [추가] 매 프레임마다 이전 테두리 찌꺼기 초기화
+                el.style.borderTop = '';
+                el.style.borderBottom = '';
+                el.style.borderLeft = '';
+                el.style.borderRight = '';
+
+                let cell = getTile(mx, my);
+                el.classList.add(`tile-${cell.type}`);
+                
+                if (cell.type === 'building') {
+                    if (cell.name) el.innerText = cell.name.substring(0, 2);
+                    
+                    // [핵심 로직] 상하좌우 타일을 검사하여, '나와 다른 종류의 건물'이거나 '빈 땅/도로'일 때만 진한 외곽선을 칠함
+                    if (getTile(mx, my - 1).bName !== cell.bName) el.style.borderTop = '2px solid rgba(0,0,0,0.8)';
+                    if (getTile(mx, my + 1).bName !== cell.bName) el.style.borderBottom = '2px solid rgba(0,0,0,0.8)';
+                    if (getTile(mx - 1, my).bName !== cell.bName) el.style.borderLeft = '2px solid rgba(0,0,0,0.8)';
+                    if (getTile(mx + 1, my).bName !== cell.bName) el.style.borderRight = '2px solid rgba(0,0,0,0.8)';
+                }
+                
+                // 캐릭터 렌더링
+                if (character.x === mx && character.y === my) {
+                    el.innerHTML += `<span class="char">${character.emoji}</span>`;
+                }
+            }
+        }
+    }
 
 </script>
 </body>
