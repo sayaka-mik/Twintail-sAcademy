@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>오늘의 트윈테일 alphe-0.12-</title>
+    <title>오늘의 트윈테일 alphe-0.13</title>
     <style>
         * { box-sizing: border-box; touch-action: manipulation; }
         body {
@@ -120,7 +120,7 @@
 <div id="app">
     <div id="screen-start" class="screen center-screen">
         <div class="title">아포칼립스 샌드박스</div>
-        <div class="subtitle">오늘의트윈테일.alpha.0.12.마인드.특성.</div>
+        <div class="subtitle">오늘의트윈테일.alpha.0.13.바그너.도로개선.</div>
         <button class="btn-large" onclick="changeScreen('screen-intermission')">게임 준비</button>
     </div>
 
@@ -166,11 +166,12 @@
             <div id="modal-trait-box" style="background: #eef2f3; padding: 10px; border-radius: 8px; margin-bottom: 10px; text-align: left; border: 1px dashed #7f8c8d; font-size: 13px;">
                 </div>
 
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; border: 1px solid #ddd;">
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; border: 1px solid #ddd;">
                 <div style="font-weight: bold; margin-bottom: 8px; color: #2d3436; border-bottom: 1px solid #ccc; padding-bottom: 5px;">[내면 상태]</div>
                 <div id="mental-stats-area" style="font-size: 14px; color: #333; display: flex; flex-direction: column; gap: 5px;">
-                    <div>🔥 용기: <strong id="stat-courage" style="color: #e74c3c;">50</strong></div>
+                    <div>🔥 스트레스: <strong id="stat-stress" style="color: #e74c3c;">0</strong> <span style="font-size:11px; color:#999;">/ 100</span></div>
                 </div>
+            </div>
             </div>
 
             <button class="btn-close" onclick="closePausePopup()">닫기</button>
@@ -197,6 +198,7 @@
     let enemyTimer = null; // [추가] 적 전용 타이머
     let isPaused = false;
     let enemies = []; // [추가] 맵에 존재하는 적 목록
+    let npcs = [];
 
     // [추가] 건물별 자원 설정 (하드코딩 방지용 Config)
     const BUILDING_RESOURCES = {
@@ -214,8 +216,11 @@
         { id: 'twintail', name: '트윈테일', description: '트윈테일임' }
     ];
 
-    // [수정] 캐릭터 스탯 팩토리 (심리 스탯 및 특성 칸 추가)
-    function createEntityStats(hp, atk, maxWeight) {
+// [수정] 스탯 팩토리 (성별, 연령, 스트레스 추가)
+    function createEntityStats(hp, atk, maxWeight, gender = null, age = null) {
+        let g = gender ? gender : (Math.random() < 0.5 ? '남' : '여');
+        let a = age ? age : Math.floor(Math.random() * (60 - 15 + 1)) + 15;
+
         return {
             hp: hp, maxHp: hp, atk: atk,
             hunger: 0, maxHunger: 100,
@@ -228,14 +233,32 @@
             actionTimer: 0,
             sleepDuration: 0,
             
-            // --- [내면 스탯 영역] ---
-            courage: 50, // 용기
-            love: 50,    // 사랑 (아직 안짬)
-            anger: 0,    // 분노 (아직 안짬)
+            // --- [내면 & 신상 스탯] ---
+            gender: g,
+            age: a,
+            stress: 0, maxStress: 100, // 용기 대체
             
-            // --- [특성 영역] ---
-            traits: [] // 부여받은 특성 객체들이 담길 곳
+            traits: []
         };
+    }
+
+    // [추가] 초기 상태 랜덤 템플릿 부여 함수
+    function applyInitialTemplate(stats, type = 'random') {
+        const types = ['기본형', '빈민형', '피로형', '스트레스형'];
+        if (type === 'random') type = types[Math.floor(Math.random() * types.length)];
+        
+        stats.template = type; // 확인용 라벨
+
+        if (type === '기본형') {
+            stats.hunger = 10; stats.thirst = 10; stats.fatigue = 10; stats.stress = 0;
+        } else if (type === '빈민형') {
+            stats.hp -= 10; stats.hunger = 70; stats.thirst = 60; stats.fatigue = 40; stats.stress = 30;
+        } else if (type === '피로형') {
+            stats.hunger = 30; stats.thirst = 30; stats.fatigue = 80; stats.stress = 40;
+        } else if (type === '스트레스형') {
+            stats.hunger = 20; stats.thirst = 20; stats.fatigue = 20; stats.stress = 80;
+        }
+        return stats;
     }
 
     // [추가] 심리 상태에 따른 행동 변화 로직 (아직 안짬 - 공간만 확보)
@@ -270,7 +293,8 @@
         changeScreen('screen-start');
     }
 
-function startSimulation() {
+// [수정] 게임 시작 시 트윈테일과 바그너 생성
+    function startSimulation() {
         changeScreen('screen-game');
         turnCount = 0;
         isPaused = false;
@@ -278,19 +302,49 @@ function startSimulation() {
         document.getElementById('btn-pause').classList.remove('paused');
         
         enemies = []; 
-        character.stats = createEntityStats(50, 1, 4); 
+        npcs = []; // NPC 초기화
+        
+        // 트윈테일 생성 (여, 20세, 순정 상태)
+        character.stats = createEntityStats(50, 1, 4, '여', 20); 
         character.emoji = '🥰';
+        let twintailTrait = TRAIT_DATABASE[Math.floor(Math.random() * TRAIT_DATABASE.length)];
+        character.stats.traits.push(twintailTrait);
 
-        // [추가] 랜덤 특성 부여 (시작 시 리셋 효과)
-        let randomTrait = TRAIT_DATABASE[Math.floor(Math.random() * TRAIT_DATABASE.length)];
-        character.stats.traits.push(randomTrait);
+        // 바그너 생성 (남, 20세, 랜덤 템플릿 적용)
+        let wagnerStats = createEntityStats(50, 1, 4, '남', 20);
+        applyInitialTemplate(wagnerStats, 'random');
+        let wagnerTrait = TRAIT_DATABASE[Math.floor(Math.random() * TRAIT_DATABASE.length)];
+        wagnerStats.traits.push(wagnerTrait);
+        
+        npcs.push({ name: '바그너', x: 0, y: 0, emoji: '👱‍♂️', stats: wagnerStats });
 
         initDisplay();
         generateMap();
-        spawnCharacter();
+        spawnEntities(); // 스폰 함수 이름 변경
         
         startTimer();
         render();
+    }
+
+    // [수정] 전원 맵에 무작위 뿌리기
+    function spawnEntities() {
+        // 트윈테일 스폰
+        while(true) {
+            let rx = Math.floor(Math.random() * MAP_SIZE), ry = Math.floor(Math.random() * MAP_SIZE);
+            if (mapGrid[ry][rx].type === 'empty' || mapGrid[ry][rx].type === 'road') {
+                character.x = rx; character.y = ry; break;
+            }
+        }
+        // NPC 스폰
+        npcs.forEach(npc => {
+            while(true) {
+                let rx = Math.floor(Math.random() * MAP_SIZE), ry = Math.floor(Math.random() * MAP_SIZE);
+                if (mapGrid[ry][rx].type === 'empty' || mapGrid[ry][rx].type === 'road') {
+                    npc.x = rx; npc.y = ry; break;
+                }
+            }
+        });
+        updateCamera();
     }
 
 // [수정] 타이머 시작/정지 함수 분리
@@ -307,6 +361,7 @@ function startSimulation() {
         if(enemyTimer) { clearInterval(enemyTimer); enemyTimer = null; }
     }
 
+// [수정] 마인드 팝업창 스트레스 반영
     function togglePause() {
         isPaused = !isPaused;
         const btn = document.getElementById('btn-pause');
@@ -316,9 +371,8 @@ function startSimulation() {
             btn.classList.add('paused');
             
             document.getElementById('popup-turn').innerText = turnCount;
-            document.getElementById('stat-courage').innerText = character.stats.courage;
+            document.getElementById('stat-stress').innerText = character.stats.stress; // 스트레스
             
-            // [추가] 특성 상세 내용 팝업에 출력
             let traitHtml = '';
             character.stats.traits.forEach(t => {
                 traitHtml += `<div><strong>[특성] ${t.name}</strong> : ${t.description}</div>`;
@@ -327,6 +381,7 @@ function startSimulation() {
             
             document.getElementById('modal-pause').classList.remove('hidden');
         } else {
+            // (이하 유지) ...
             startTimer();
             btn.innerText = "일시정지";
             btn.classList.remove('paused');
@@ -371,6 +426,13 @@ function startSimulation() {
             ctx.fill();
         });
 
+        ctx.fillStyle = '#2ecc71'; // 맑은 초록색
+        npcs.forEach(npc => {
+            ctx.beginPath();
+            ctx.arc(npc.x * tileSize + 2, npc.y * tileSize + 2, 3, 0, Math.PI*2);
+            ctx.fill();
+        });
+
         // 캐릭터 위치 (노란색)
         ctx.fillStyle = '#f1c40f';
         ctx.beginPath();
@@ -383,43 +445,43 @@ function startSimulation() {
         document.getElementById('modal-map').classList.add('hidden');
     }
 
-// [수정] 메인 게임 틱 (400ms)
+// [수정] 메인 게임 틱 (전원 AI 및 스탯 연산)
     function gameTick() {
-turnCount++;
+        turnCount++;
         updateDayNightCycle(); 
         
-        executeCharacterAI(); // <--- 변경됨!
+        // 모든 인물 AI 가동
+        executeCharacterAI(character); 
+        npcs.forEach(npc => executeCharacterAI(npc));
         
         updateCamera();
-        updateStatus(); 
+        
+        // 모든 인물 스탯 증감
+        updateStatus(character); 
+        npcs.forEach(npc => updateStatus(npc));
+        
         spawnEnemiesAtNight(); 
         updateStatusUI(); 
         render();
     }
 
-// [수정] 2시간(10턴) 주기 스탯 증감 엔진
-    function updateStatus() {
+// [수정] 턴당 스탯 증감 연산도 특정 객체(entity) 단위로 작동함
+    function updateStatus(entity) {
         if (turnCount % 10 === 0 && turnCount > 0) {
-            let st = character.stats;
-            
-            // [추가] 갈증은 이동 여부와 무관하게 10턴마다 4 상승
+            let st = entity.stats;
             st.thirst = Math.min(st.maxThirst, st.thirst + 4);
 
             if (st.movesInInterval > 5) {
-                // 가방 안의 총 아이템 개수 계산
                 let totalItems = st.inventory.food + st.inventory.water;
-                
                 let hungerGain = 4 + (totalItems >= 2 ? 1 : 0);
                 st.hunger = Math.min(st.maxHunger, st.hunger + hungerGain);
                 
                 let fatigueGain = 5 + (totalItems >= 2 ? 1 : 0);
                 st.fatigue = Math.min(st.maxFatigue, st.fatigue + fatigueGain);
             }
-            
             if (st.hunger >= 90) st.hp -= 1;
             if (st.fatigue >= 90) st.hp -= 2;
             if (st.hp < 0) st.hp = 0; 
-
             st.movesInInterval = 0;
         }
     }
@@ -480,16 +542,14 @@ turnCount++;
         document.getElementById('viewport-container').style.backgroundColor = bgColor;
     }
 
-// [수정] 행위 선택기 (수면 회복량 버프 및 사망 체크 추가)
-// [수정] 행동 선택 AI (물 마시기, 파밍 우선순위 조정)
-    function executeCharacterAI() {
-        let st = character.stats;
+// [수정] AI 로직: 특정 주체(entity)를 받아 연산함
+    function executeCharacterAI(entity) {
+        let st = entity.stats;
         if (st.hp <= 0) return;
 
-        // [추가] 갈증 90 이상이면 '매 턴(400ms)'마다 HP 1씩 깎임
         if (st.thirst >= 90) {
             st.hp -= 1;
-            if (st.hp <= 0) return; // 깎여서 사망 시 이번 턴 행동 중지
+            if (st.hp <= 0) return; 
         }
 
         if (st.actionTimer > 0) {
@@ -500,8 +560,7 @@ turnCount++;
                 if (st.currentState === 'RESTING') { st.hunger += 1; st.fatigue = Math.max(0, st.fatigue - 5); }
                 
                 if ((st.currentState === 'SLEEPING_IN' || st.currentState === 'SLEEPING_OUT') && st.sleepDuration < 70) {
-                    let enemyVisible = enemies.some(en => Math.abs(en.x - character.x) + Math.abs(en.y - character.y) <= 3); 
-                    // [수정] 목마르면 잠에서 깨도록 조건 추가
+                    let enemyVisible = enemies.some(en => Math.abs(en.x - entity.x) + Math.abs(en.y - entity.y) <= 3); 
                     if (!enemyVisible && st.hunger < 90 && st.thirst < 90) { 
                         st.actionTimer = 10; return;
                     }
@@ -513,10 +572,8 @@ turnCount++;
         }
 
         let candidates = [];
-        let enemyVisible = enemies.some(en => Math.abs(en.x - character.x) + Math.abs(en.y - character.y) <= 7);
+        let enemyVisible = enemies.some(en => Math.abs(en.x - entity.x) + Math.abs(en.y - entity.y) <= 7);
 
-        // [행동 우선순위 풀]
-        // 💡 팁: '식량 버리기' 나 '물 버리기'가 들어간 이유는 가방이 꽉 찼을 때 파밍을 시도하기 위함입니다!
         if (enemyVisible) { candidates = ['도망치기', '공격']; } 
         else if (st.thirst > 90) { candidates = ['물마시기', '강 찾기', '식량 버리기', '물파밍', '노상수면', '대기']; } 
         else if (st.hunger > 90) { candidates = ['식사', '건물 찾기', '물 버리기', '식량파밍', '노상수면', '대기']; } 
@@ -527,19 +584,13 @@ turnCount++;
         else if (st.fatigue <= 50) { candidates = ['휴식', '돌아다니기', '대기']; } 
         else { candidates = ['돌아다니기', '대기']; } 
 
-// 3. 조건이 맞는 가장 앞의 행위 실행
         for (let actName of candidates) {
-            if (ACTIONS[actName] && ACTIONS[actName].canExecute()) {
-                // [버그 픽스] 행동을 시도해보고, false가 떨어지면 포기하고 다음 우선순위 행동을 찾음
-                let success = ACTIONS[actName].execute(); 
-                if (success !== false) {
-                    return; // 행동을 무사히 마쳤으면 턴 종료
-                }
+            if (ACTIONS[actName] && ACTIONS[actName].canExecute(entity)) {
+                let success = ACTIONS[actName].execute(entity); 
+                if (success !== false) return; 
             }
         }
-        
-        // 위에서 뭘 하려다 다 실패했거나 할 게 없으면 무조건 돌아다님
-        ACTIONS['돌아다니기'].execute();
+        ACTIONS['돌아다니기'].execute(entity);
     }
 
     function updateCamera() {
@@ -563,14 +614,153 @@ turnCount++;
         }
     }
 
+// [수정] 메인 맵 생성 함수 (순서 변경)
     function generateMap() {
         mapGrid = Array.from(Array(MAP_SIZE), () => Array(MAP_SIZE).fill({ type: 'empty', name: '' }));
         
         generateBlobs('mountain', 4, 150);
         generateRiver();
-        generateRoads(40, 40, 5); 
-        generateBuildings();
+        
+        // [핵심 변경] 거점(Node) 기반 생성
+        let hubs = generateCityHubs();     // 1. 도시 중심지 3~4개 낙점
+        generateHighways(hubs);            // 2. 거점들을 잇는 국도 연결
+        generateCityClusters(hubs);        // 3. 거점 주변에 건물 집중 배치
+        
         generateBlobs('forest', 20, 40);
+    }
+
+    // [추가] 도시 중심지(Hub) 결정 로직
+    function generateCityHubs() {
+        let numHubs = Math.floor(Math.random() * 2) + 3; // 3개 또는 4개
+        let hubs = [];
+        
+        for (let i = 0; i < numHubs; i++) {
+            let valid = false, attempts = 0;
+            while (!valid && attempts < 100) {
+                // 맵 가장자리를 피해서 무작위 좌표 설정
+                let hx = 15 + Math.floor(Math.random() * (MAP_SIZE - 30));
+                let hy = 15 + Math.floor(Math.random() * (MAP_SIZE - 30));
+                
+                // 동서남북 강제 4분할은 피하되, 거점끼리 너무 겹치는 것만 방지 (최소 15칸 간격)
+                let tooClose = hubs.some(h => Math.abs(h.x - hx) + Math.abs(h.y - hy) < 15);
+                
+                let type = getTile(hx, hy).type;
+                if (!tooClose && type !== 'mountain' && type !== 'river') {
+                    hubs.push({ x: hx, y: hy });
+                    valid = true;
+                }
+                attempts++;
+            }
+        }
+        return hubs;
+    }
+
+// [수정] 거점 간 국도(Highway) 연결 로직 (강 위에 다리 건설 허용)
+    function generateHighways(hubs) {
+        if (hubs.length < 2) return;
+        
+        for (let i = 0; i < hubs.length; i++) {
+            let start = hubs[i];
+            let end = hubs[(i + 1) % hubs.length]; 
+            
+            let cx = start.x, cy = start.y;
+            let failsafe = 0;
+            
+            while ((cx !== end.x || cy !== end.y) && failsafe < 200) {
+                let currentTile = getTile(cx, cy).type;
+                
+                // 🚨 핵심 수정: currentTile === 'river' 일 때도 도로를 칠하도록 허용! (이것이 다리가 됨)
+                if (currentTile === 'empty' || currentTile === 'road' || currentTile === 'forest' || currentTile === 'river') {
+                    setTile(cx, cy, 'road');
+                    
+                    // 간선도로 두께 설정 시에도 강을 덮어쓸 수 있게 허용
+                    if (Math.random() < 0.6) {
+                        let nextTile = getTile(cx+1, cy).type;
+                        if (nextTile === 'empty' || nextTile === 'river') {
+                            setTile(cx+1, cy, 'road');
+                        }
+                    }
+                }
+                
+                // 목적지를 향해 지그재그 이동
+                if (Math.random() < 0.5) {
+                    if (cx !== end.x) cx += (end.x > cx ? 1 : -1);
+                    else cy += (end.y > cy ? 1 : -1);
+                } else {
+                    if (cy !== end.y) cy += (end.y > cy ? 1 : -1);
+                    else cx += (end.x > cx ? 1 : -1);
+                }
+                failsafe++;
+            }
+        }
+    }
+
+    // [추가/수정] 거점 반경에 건물 밀집(Zoning) 로직
+    function generateCityClusters(hubs) {
+        const bTypes = Object.keys(PREFABS);
+        
+        // 1. 각 도시 중심지에 시가지용 로컬 십자 도로망 생성
+        hubs.forEach(hub => {
+            for(let r = -7; r <= 7; r++) {
+                if(getTile(hub.x + r, hub.y).type === 'empty') setTile(hub.x + r, hub.y, 'road');
+                if(getTile(hub.x, hub.y + r).type === 'empty') setTile(hub.x, hub.y + r, 'road');
+            }
+        });
+
+        // 2. 거점 주변 반경에 600번의 건물 쑤셔넣기 시도 (압도적 밀집 유도)
+        for (let i = 0; i < 600; i++) { 
+            let hub = hubs[Math.floor(Math.random() * hubs.length)];
+            
+            // 거점 반경 13칸 이내로 무작위 좌표 난사
+            let angle = Math.random() * Math.PI * 2;
+            let dist = Math.random() * 13; 
+            let rx = Math.floor(hub.x + Math.cos(angle) * dist);
+            let ry = Math.floor(hub.y + Math.sin(angle) * dist);
+
+            let bName = bTypes[Math.floor(Math.random() * bTypes.length)];
+            let prefab = PREFABS[bName];
+            for(let r=0; r<Math.floor(Math.random() * 4); r++) prefab = rotatePrefab(prefab);
+
+            // 빈 땅에만 지어지도록 체크
+            let canPlace = true;
+            for (let p of prefab) { 
+                let tx = rx + p[0], ty = ry + p[1];
+                if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE || getTile(tx, ty).type !== 'empty') { 
+                    canPlace = false; break; 
+                } 
+            }
+
+            if (canPlace) {
+                // 자원(식량/수면) 할당 헬퍼 함수
+                const placeBuildingTile = (bx, by, bName, isFirstTile) => {
+                    let resConfig = BUILDING_RESOURCES[bName] || { food: [0,0], sleep: 0 };
+                    let foodAmount = Math.floor(Math.random() * (resConfig.food[1] - resConfig.food[0] + 1)) + resConfig.food[0];
+                    setTile(bx, by, 'building', {
+                        name: isFirstTile ? bName : '', 
+                        bName: bName, 
+                        food: foodAmount,
+                        sleep: resConfig.sleep
+                    });
+                };
+
+                // 본체 건물 건설
+                for (let j = 0; j < prefab.length; j++) {
+                    placeBuildingTile(rx + prefab[j][0], ry + prefab[j][1], bName, j === 0);
+                }
+                
+                // 아파트의 경우 군집화(단지 형성)
+                if (bName === '아파트' && Math.random() < 0.7) {
+                    let shiftX = Math.random() < 0.5 ? 3 : -3, canPlace2 = true;
+                    for (let p of prefab) {
+                        let tx = rx+shiftX+p[0], ty = ry+p[1];
+                        if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE || getTile(tx, ty).type !== 'empty') canPlace2 = false;
+                    }
+                    if (canPlace2) {
+                        for (let j = 0; j < prefab.length; j++) placeBuildingTile(rx + shiftX + prefab[j][0], ry + prefab[j][1], bName, j === 0);
+                    }
+                }
+            }
+        }
     }
 
     function spawnCharacter() {
@@ -590,107 +780,91 @@ turnCount++;
 
     let character = { x: 0, y: 0, emoji: '🥰', stats: createEntityStats(50, 1, 4) };
 
-// [추가 및 수정] 행위 목록 사전
+// [수정] 어떤 캐릭터(ent)든 받아서 행동하게 끔 리팩토링된 ACTIONS 사전
     const ACTIONS = {
-        // ... (돌아다니기, 건물 찾기 등 기존 내용 유지) ...
         '돌아다니기': {
-            canExecute: () => true,
-            execute: () => {
+            canExecute: (ent) => true,
+            execute: (ent) => {
                 let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(() => Math.random() - 0.5); 
                 for (let d of dirs) {
-                    let nx = character.x + d[0], ny = character.y + d[1];
+                    let nx = ent.x + d[0], ny = ent.y + d[1];
                     let type = getTile(nx, ny).type;
                     if (type !== 'mountain' && type !== 'river' && type !== 'out') {
-                        character.x = nx; character.y = ny;
-                        character.stats.movesInInterval++; break;
+                        ent.x = nx; ent.y = ny; ent.stats.movesInInterval++; break;
                     }
                 }
             }
         },
-// [수정] 건물을 찾지 못하면 false를 반환하여 다른 행동을 유도함
         '건물 찾기': {
-            canExecute: () => getTile(character.x, character.y).type !== 'building',
-            execute: () => {
-                let next = getNextStepBFS(character.x, character.y, null, null, 'building');
-                if (next) { 
-                    character.x = next.x; character.y = next.y; 
-                    character.stats.movesInInterval++; 
-                    return true; 
-                }
-                return false; // 실패!
+            canExecute: (ent) => getTile(ent.x, ent.y).type !== 'building',
+            execute: (ent) => {
+                let next = getNextStepBFS(ent.x, ent.y, null, null, 'building');
+                if (next) { ent.x = next.x; ent.y = next.y; ent.stats.movesInInterval++; return true; }
+                return false; 
             }
         },
-        // [수정] 강을 찾지 못하면 false를 반환
         '강 찾기': {
-            canExecute: () => ![[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(character.x+d[0], character.y+d[1]).type === 'river'),
-            execute: () => {
-                let next = getNextStepBFS(character.x, character.y, null, null, 'river_adjacent');
-                if (next) { 
-                    character.x = next.x; character.y = next.y; 
-                    character.stats.movesInInterval++; 
-                    return true; 
-                }
-                return false; // 실패!
+            canExecute: (ent) => ![[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(ent.x+d[0], ent.y+d[1]).type === 'river'),
+            execute: (ent) => {
+                let next = getNextStepBFS(ent.x, ent.y, null, null, 'river_adjacent');
+                if (next) { ent.x = next.x; ent.y = next.y; ent.stats.movesInInterval++; return true; }
+                return false; 
             }
         },
-        // [수정] 통합 가방 체크
         '식량파밍': {
-            canExecute: () => {
-                let t = getTile(character.x, character.y);
-                let totalItems = character.stats.inventory.food + character.stats.inventory.water;
-                return t.type === 'building' && t.food > 0 && totalItems < character.stats.weightLimit;
+            canExecute: (ent) => {
+                let t = getTile(ent.x, ent.y);
+                let totalItems = ent.stats.inventory.food + ent.stats.inventory.water;
+                return t.type === 'building' && t.food > 0 && totalItems < ent.stats.weightLimit;
             },
-            execute: () => { getTile(character.x, character.y).food--; character.stats.inventory.food++; }
+            execute: (ent) => { getTile(ent.x, ent.y).food--; ent.stats.inventory.food++; }
         },
-        // [추가] 물 파밍
         '물파밍': {
-            canExecute: () => {
-                let isNearRiver = [[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(character.x+d[0], character.y+d[1]).type === 'river');
-                let totalItems = character.stats.inventory.food + character.stats.inventory.water;
-                return isNearRiver && totalItems < character.stats.weightLimit;
+            canExecute: (ent) => {
+                let isNearRiver = [[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(ent.x+d[0], ent.y+d[1]).type === 'river');
+                let totalItems = ent.stats.inventory.food + ent.stats.inventory.water;
+                return isNearRiver && totalItems < ent.stats.weightLimit;
             },
-            execute: () => { character.stats.inventory.water++; }
+            execute: (ent) => { ent.stats.inventory.water++; }
         },
         '식사': {
-            canExecute: () => character.stats.inventory.food > 0,
-            execute: () => { character.stats.inventory.food--; character.stats.hunger = Math.max(0, character.stats.hunger - 8); }
+            canExecute: (ent) => ent.stats.inventory.food > 0,
+            execute: (ent) => { ent.stats.inventory.food--; ent.stats.hunger = Math.max(0, ent.stats.hunger - 8); }
         },
-        // [추가] 물 마시기 (갈증 40 감소)
         '물마시기': {
-            canExecute: () => character.stats.inventory.water > 0,
-            execute: () => { character.stats.inventory.water--; character.stats.thirst = Math.max(0, character.stats.thirst - 40); }
+            canExecute: (ent) => ent.stats.inventory.water > 0,
+            execute: (ent) => { ent.stats.inventory.water--; ent.stats.thirst = Math.max(0, ent.stats.thirst - 40); }
         },
-        // [추가] 물 버리기 (가방 공간 비우기용)
         '물 버리기': {
-            canExecute: () => character.stats.inventory.water > 0,
-            execute: () => { character.stats.inventory.water--; }
+            canExecute: (ent) => ent.stats.inventory.water > 0,
+            execute: (ent) => { ent.stats.inventory.water--; }
         },
         '식량 버리기': {
-            canExecute: () => character.stats.inventory.food > 0,
-            execute: () => {
-                character.stats.inventory.food--;
-                getTile(character.x, character.y).droppedFood = (getTile(character.x, character.y).droppedFood || 0) + 1;
+            canExecute: (ent) => ent.stats.inventory.food > 0,
+            execute: (ent) => {
+                ent.stats.inventory.food--;
+                getTile(ent.x, ent.y).droppedFood = (getTile(ent.x, ent.y).droppedFood || 0) + 1;
             }
         },
         '수면': {
-            canExecute: () => getTile(character.x, character.y).type === 'building',
-            execute: () => { character.stats.currentState = 'SLEEPING_IN'; character.stats.actionTimer = 10; }
+            canExecute: (ent) => getTile(ent.x, ent.y).type === 'building',
+            execute: (ent) => { ent.stats.currentState = 'SLEEPING_IN'; ent.stats.actionTimer = 10; }
         },
         '노상수면': {
-            canExecute: () => getTile(character.x, character.y).type !== 'building',
-            execute: () => { character.stats.currentState = 'SLEEPING_OUT'; character.stats.actionTimer = 10; }
+            canExecute: (ent) => getTile(ent.x, ent.y).type !== 'building',
+            execute: (ent) => { ent.stats.currentState = 'SLEEPING_OUT'; ent.stats.actionTimer = 10; }
         },
         '휴식': {
-            canExecute: () => true,
-            execute: () => { character.stats.currentState = 'RESTING'; character.stats.actionTimer = 10; }
+            canExecute: (ent) => true,
+            execute: (ent) => { ent.stats.currentState = 'RESTING'; ent.stats.actionTimer = 10; }
         },
-        '대기': { canExecute: () => true, execute: () => {} },
-        '도망치기': { canExecute: () => true, execute: () => { ACTIONS['돌아다니기'].execute(); } },
+        '대기': { canExecute: (ent) => true, execute: (ent) => {} },
+        '도망치기': { canExecute: (ent) => true, execute: (ent) => { ACTIONS['돌아다니기'].execute(ent); } },
         '공격': {
-            canExecute: () => true,
-            execute: () => {
-                let target = enemies.find(en => en.x === character.x && en.y === character.y);
-                if (target) { target.hp -= character.stats.atk; character.stats.currentState = 'STUNNED'; character.stats.actionTimer = 2; }
+            canExecute: (ent) => true,
+            execute: (ent) => {
+                let target = enemies.find(en => en.x === ent.x && en.y === ent.y);
+                if (target) { target.hp -= ent.stats.atk; ent.stats.currentState = 'STUNNED'; ent.stats.actionTimer = 2; }
             }
         }
     };
@@ -948,33 +1122,35 @@ function generateRiver() {
         }
     }
 
-// [수정] UI 업데이트 로직 (상태 텍스트 추가)
+// [수정] 렌더링에 NPC 추가 및 스탯창 제목에 연령/성별 표기
     function updateStatusUI() {
         document.getElementById('stat-hp').innerText = character.stats.hp;
         document.getElementById('stat-atk').innerText = character.stats.atk;
         document.getElementById('stat-hunger').innerText = character.stats.hunger;
-        document.getElementById('stat-thirst').innerText = character.stats.thirst; // 추가
+        document.getElementById('stat-thirst').innerText = character.stats.thirst; 
         document.getElementById('stat-fatigue').innerText = character.stats.fatigue;
         
         let totalItems = character.stats.inventory.food + character.stats.inventory.water;
         document.getElementById('stat-bag').innerText = totalItems;
 
-        // [추가] 부여된 특성 이름 가져오기
         let traitName = character.stats.traits.length > 0 ? character.stats.traits[0].name : '없음';
-
         const stateKo = { 'IDLE': '대기', 'SLEEPING_IN': '수면', 'SLEEPING_OUT': '노상수면', 'RESTING': '휴식', 'STUNNED': '기절' };
+        
         let currentAction = '행동 중';
         if (character.stats.hp <= 0) currentAction = '사망 ☠️';
         else if (character.stats.actionTimer > 0) currentAction = stateKo[character.stats.currentState] || '행동 중';
         else currentAction = '돌아다니기';
 
-        // [수정] 상태 표시 형식: 🥰 트윈테일 [상태: 돌아다니기] [특성: 미소녀]
-        document.getElementById('status-title').innerText = `🥰 트윈테일 [상태: ${currentAction}] [특성: ${traitName}]`;
+        // 연령 성별 추가 표기
+        let infoStr = `(${character.stats.gender}, ${character.stats.age}세)`;
+        document.getElementById('status-title').innerHTML = `🥰 트윈테일 ${infoStr} [특성: ${traitName}] <br> [상태: ${currentAction}]</span>`;
     }
 
+// [수정/복구] 모든 그래픽을 화면에 띄우는 완전한 렌더링 함수
     function render() {
         for (let y = 0; y < VIEW_SIZE; y++) {
             for (let x = 0; x < VIEW_SIZE; x++) {
+                // 🚨 지워졌던 카메라 좌표(mx, my) 계산 복구
                 let mx = camera.x + x;
                 let my = camera.y + y;
                 
@@ -982,7 +1158,7 @@ function generateRiver() {
                 el.className = 'tile';
                 el.innerHTML = '';
                 
-                // [추가] 매 프레임마다 이전 테두리 찌꺼기 초기화
+                // 테두리 초기화
                 el.style.borderTop = '';
                 el.style.borderBottom = '';
                 el.style.borderLeft = '';
@@ -991,10 +1167,10 @@ function generateRiver() {
                 let cell = getTile(mx, my);
                 el.classList.add(`tile-${cell.type}`);
                 
+                // 건물 렌더링 및 테두리 (지워졌던 부분 복구)
                 if (cell.type === 'building') {
                     if (cell.name) el.innerText = cell.name.substring(0, 2);
                     
-                    // [핵심 로직] 상하좌우 타일을 검사하여, '나와 다른 종류의 건물'이거나 '빈 땅/도로'일 때만 진한 외곽선을 칠함
                     if (getTile(mx, my - 1).bName !== cell.bName) el.style.borderTop = '2px solid rgba(0,0,0,0.8)';
                     if (getTile(mx, my + 1).bName !== cell.bName) el.style.borderBottom = '2px solid rgba(0,0,0,0.8)';
                     if (getTile(mx - 1, my).bName !== cell.bName) el.style.borderLeft = '2px solid rgba(0,0,0,0.8)';
@@ -1007,15 +1183,21 @@ function generateRiver() {
                     el.innerHTML += `<span class="char" style="z-index:15;">👹</span>`;
                 }
                 
-                // 땅에 떨어진 식량 렌더링 (1/4 크기)
+                // 땅에 떨어진 식량 렌더링
                 if (cell.droppedFood > 0) {
                     el.innerHTML += `<span class="dropped-food">🍖</span>`;
                 }
 
-                // 캐릭터 렌더링 (적보다 위에 그려짐)
+                // [추가됨] NPC 렌더링 (바그너)
+                let npcInCell = npcs.find(n => n.x === mx && n.y === my);
+                if (npcInCell) {
+                    let displayEmoji = npcInCell.stats.hp <= 0 ? '☠️' : npcInCell.emoji;
+                    el.innerHTML += `<span class="char" style="z-index:19;">${displayEmoji}</span>`;
+                }
+
+                // [추가됨] 캐릭터 렌더링 (트윈테일)
                 if (character.x === mx && character.y === my) {
                     let displayEmoji = character.stats.hp <= 0 ? '☠️' : character.emoji;
-                    // 🚨 수정됨: ${character.emoji} 대신 ${displayEmoji}를 출력하도록 변경
                     el.innerHTML += `<span class="char" style="z-index:20;">${displayEmoji}</span>`;
                 }
             }
