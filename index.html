@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>아포칼립스 시뮬레이터 (UI & Character)-alpha-0.07</title>
+    <title>오늘의 트윈테일 alphe-0.12-</title>
     <style>
         * { box-sizing: border-box; touch-action: manipulation; }
         body {
@@ -108,6 +108,10 @@
         /* 미니맵 캔버스 */
         #minimap-canvas {
             background: #000; border: 2px solid #333; max-width: 100%; image-rendering: pixelated;
+
+            /* CSS에 추가 */
+        .dropped-food { position: absolute; font-size: 8px; bottom: 1px; right: 1px; }
+
         }
     </style>
 </head>
@@ -116,7 +120,7 @@
 <div id="app">
     <div id="screen-start" class="screen center-screen">
         <div class="title">아포칼립스 샌드박스</div>
-        <div class="subtitle">v0.1 - 첫 번째 생존자</div>
+        <div class="subtitle">오늘의트윈테일.alpha.0.12.마인드.특성.</div>
         <button class="btn-large" onclick="changeScreen('screen-intermission')">게임 준비</button>
     </div>
 
@@ -132,33 +136,43 @@
             <div>진행 턴: <span id="hud-turn" style="color: #f1c40f;">0</span></div>
             <div><span id="hud-time" style="color: #badc58;">06:00</span></div>
         </div>
-        <div id="viewport-container">
+<div id="viewport-container">
             <div id="game-board"></div>
             <div id="character-status">
-                <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #f1c40f;">🥰 주인공 상태</div>
+                <div id="status-title" style="font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #f1c40f;">🥰 트윈테일 [상태: 대기]</div>
                 <div class="stat-grid">
                     <span>❤️ HP: <span id="stat-hp">50</span>/50</span>
                     <span>⚔️ 공격: <span id="stat-atk">1</span></span>
                     <span>🍖 허기: <span id="stat-hunger">0</span></span>
+                    <span>💧 갈증: <span id="stat-thirst">0</span></span>
                     <span>💤 피로: <span id="stat-fatigue">0</span></span>
-                    <span style="grid-column: span 2;">🎒 가방(식량): <span id="stat-bag">0</span>/4</span>
+                    <span>🎒 가방슬롯: <span id="stat-bag">0</span>/4</span>
                 </div>
             </div>
-        </div>
-
-        <div id="controls">
+        </div> <div id="controls">
             <button class="btn-control" onclick="goHome()">처음으로</button>
             <button id="btn-pause" class="btn-control btn-pause" onclick="togglePause()">일시정지</button>
             <button class="btn-control" onclick="showMap()">전체 지도</button>
         </div>
-    </div>
 
-    <div id="modal-pause" class="modal-overlay hidden">
+<div id="modal-pause" class="modal-overlay hidden">
         <div class="modal-box">
-            <div class="modal-title">시뮬레이션 일시정지</div>
-            <div style="font-size: 14px; margin-bottom: 20px;">
+            <div class="modal-title">🧠 마인드 체크</div>
+            
+            <div style="font-size: 14px; margin-bottom: 15px;">
                 현재 <strong id="popup-turn" style="color:#e1b12c; font-size: 18px;">0</strong> 턴 진행되었습니다.
             </div>
+            
+            <div id="modal-trait-box" style="background: #eef2f3; padding: 10px; border-radius: 8px; margin-bottom: 10px; text-align: left; border: 1px dashed #7f8c8d; font-size: 13px;">
+                </div>
+
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; border: 1px solid #ddd;">
+                <div style="font-weight: bold; margin-bottom: 8px; color: #2d3436; border-bottom: 1px solid #ccc; padding-bottom: 5px;">[내면 상태]</div>
+                <div id="mental-stats-area" style="font-size: 14px; color: #333; display: flex; flex-direction: column; gap: 5px;">
+                    <div>🔥 용기: <strong id="stat-courage" style="color: #e74c3c;">50</strong></div>
+                </div>
+            </div>
+
             <button class="btn-close" onclick="closePausePopup()">닫기</button>
         </div>
     </div>
@@ -166,12 +180,10 @@
     <div id="modal-map" class="modal-overlay hidden">
         <div class="modal-box" style="padding: 10px;">
             <div class="modal-title" style="margin-bottom: 5px;">전체 위성 지도</div>
-            <canvas id="minimap-canvas" width="320" height="320"></canvas>
+            <canvas id="minimap-canvas" width="280" height="280"></canvas>
             <div><button class="btn-close" onclick="closeMap()">지도 닫기</button></div>
         </div>
     </div>
-</div>
-
 <script>
     const MAP_SIZE = 70;
     const VIEW_SIZE = 10;
@@ -179,11 +191,12 @@
 
     let mapGrid = [];
     let camera = { x: 0, y: 0 };
-    let character = { x: 0, y: 0, emoji: '🥰', stats: createEntityStats(50, 1, 4) };
     
     let turnCount = 0;
     let gameTimer = null;
+    let enemyTimer = null; // [추가] 적 전용 타이머
     let isPaused = false;
+    let enemies = []; // [추가] 맵에 존재하는 적 목록
 
     // [추가] 건물별 자원 설정 (하드코딩 방지용 Config)
     const BUILDING_RESOURCES = {
@@ -195,16 +208,40 @@
         '학교': { food: [3, 15], sleep: 1 }
     };
 
-    // [추가] 캐릭터 스탯 팩토리 함수 (나중에 다른 NPC 만들 때 재사용 가능)
+// [추가] 특성 목록 정의 (기능은 아직 비워둠)
+    const TRAIT_DATABASE = [
+        { id: 'pretty_girl', name: '미소녀', description: '미소녀임' },
+        { id: 'twintail', name: '트윈테일', description: '트윈테일임' }
+    ];
+
+    // [수정] 캐릭터 스탯 팩토리 (심리 스탯 및 특성 칸 추가)
     function createEntityStats(hp, atk, maxWeight) {
         return {
-            hp: hp, maxHp: hp,
-            atk: atk,
-            hunger: 0, maxHunger: 100, // 최소 -1 처리 등은 나중에 로직에서 구현
+            hp: hp, maxHp: hp, atk: atk,
+            hunger: 0, maxHunger: 100,
+            thirst: 0, maxThirst: 100, 
             fatigue: 0, maxFatigue: 100,
             weightLimit: maxWeight,
-            inventory: { food: 0 } // 현재 들고 있는 식량
+            inventory: { food: 0, water: 0 }, 
+            movesInInterval: 0,
+            currentState: 'IDLE',
+            actionTimer: 0,
+            sleepDuration: 0,
+            
+            // --- [내면 스탯 영역] ---
+            courage: 50, // 용기
+            love: 50,    // 사랑 (아직 안짬)
+            anger: 0,    // 분노 (아직 안짬)
+            
+            // --- [특성 영역] ---
+            traits: [] // 부여받은 특성 객체들이 담길 곳
         };
+    }
+
+    // [추가] 심리 상태에 따른 행동 변화 로직 (아직 안짬 - 공간만 확보)
+    function applyMentalInfluences(character) {
+        let st = character.stats;
+        // 예: 용기가 낮으면 도망 우선순위 상승 등... (추후 구현 예정)
     }
 
     // 프리팹 정의
@@ -233,13 +270,21 @@
         changeScreen('screen-start');
     }
 
-    function startSimulation() {
+function startSimulation() {
         changeScreen('screen-game');
         turnCount = 0;
         isPaused = false;
         document.getElementById('btn-pause').innerText = "일시정지";
         document.getElementById('btn-pause').classList.remove('paused');
         
+        enemies = []; 
+        character.stats = createEntityStats(50, 1, 4); 
+        character.emoji = '🥰';
+
+        // [추가] 랜덤 특성 부여 (시작 시 리셋 효과)
+        let randomTrait = TRAIT_DATABASE[Math.floor(Math.random() * TRAIT_DATABASE.length)];
+        character.stats.traits.push(randomTrait);
+
         initDisplay();
         generateMap();
         spawnCharacter();
@@ -248,14 +293,18 @@
         render();
     }
 
+// [수정] 타이머 시작/정지 함수 분리
     function startTimer() {
         if(gameTimer) clearInterval(gameTimer);
-        gameTimer = setInterval(gameTick, TURN_DELAY);
+        gameTimer = setInterval(gameTick, TURN_DELAY); // 400ms (캐릭터/시간)
+
+        if(enemyTimer) clearInterval(enemyTimer);
+        enemyTimer = setInterval(enemyTick, 370); // 370ms (적군 이동)
     }
 
     function stopTimer() {
-        clearInterval(gameTimer);
-        gameTimer = null;
+        if(gameTimer) { clearInterval(gameTimer); gameTimer = null; }
+        if(enemyTimer) { clearInterval(enemyTimer); enemyTimer = null; }
     }
 
     function togglePause() {
@@ -265,7 +314,17 @@
             stopTimer();
             btn.innerText = "이어서 시작";
             btn.classList.add('paused');
+            
             document.getElementById('popup-turn').innerText = turnCount;
+            document.getElementById('stat-courage').innerText = character.stats.courage;
+            
+            // [추가] 특성 상세 내용 팝업에 출력
+            let traitHtml = '';
+            character.stats.traits.forEach(t => {
+                traitHtml += `<div><strong>[특성] ${t.name}</strong> : ${t.description}</div>`;
+            });
+            document.getElementById('modal-trait-box').innerHTML = traitHtml || '보유 특성 없음';
+            
             document.getElementById('modal-pause').classList.remove('hidden');
         } else {
             startTimer();
@@ -304,6 +363,14 @@
             }
         }
         
+        // [추가] 맵에 존재하는 적들을 빨간색 점으로 렌더링
+        ctx.fillStyle = '#e74c3c'; // 붉은색
+        enemies.forEach(en => {
+            ctx.beginPath();
+            ctx.arc(en.x * tileSize + 2, en.y * tileSize + 2, 3, 0, Math.PI*2);
+            ctx.fill();
+        });
+
         // 캐릭터 위치 (노란색)
         ctx.fillStyle = '#f1c40f';
         ctx.beginPath();
@@ -316,16 +383,71 @@
         document.getElementById('modal-map').classList.add('hidden');
     }
 
-// --- 게임 루프 (턴 처리) ---
+// [수정] 메인 게임 틱 (400ms)
     function gameTick() {
-        turnCount++;
+turnCount++;
+        updateDayNightCycle(); 
         
-        updateDayNightCycle(); // 시간에 따른 연출 업데이트
-        moveCharacter();
+        executeCharacterAI(); // <--- 변경됨!
+        
         updateCamera();
-        updateStatusUI();
-
+        updateStatus(); 
+        spawnEnemiesAtNight(); 
+        updateStatusUI(); 
         render();
+    }
+
+// [수정] 2시간(10턴) 주기 스탯 증감 엔진
+    function updateStatus() {
+        if (turnCount % 10 === 0 && turnCount > 0) {
+            let st = character.stats;
+            
+            // [추가] 갈증은 이동 여부와 무관하게 10턴마다 4 상승
+            st.thirst = Math.min(st.maxThirst, st.thirst + 4);
+
+            if (st.movesInInterval > 5) {
+                // 가방 안의 총 아이템 개수 계산
+                let totalItems = st.inventory.food + st.inventory.water;
+                
+                let hungerGain = 4 + (totalItems >= 2 ? 1 : 0);
+                st.hunger = Math.min(st.maxHunger, st.hunger + hungerGain);
+                
+                let fatigueGain = 5 + (totalItems >= 2 ? 1 : 0);
+                st.fatigue = Math.min(st.maxFatigue, st.fatigue + fatigueGain);
+            }
+            
+            if (st.hunger >= 90) st.hp -= 1;
+            if (st.fatigue >= 90) st.hp -= 2;
+            if (st.hp < 0) st.hp = 0; 
+
+            st.movesInInterval = 0;
+        }
+    }
+
+    // [추가] 매일 밤(90턴) 적 스폰 로직
+    function spawnEnemiesAtNight() {
+        // 1일 120턴 중 밤이 시작되는 90번째 턴
+        if (turnCount % 120 === 90) {
+            let validMountains = [];
+            for(let y=0; y<MAP_SIZE; y++) {
+                for(let x=0; x<MAP_SIZE; x++) {
+                    if(mapGrid[y][x].type === 'mountain') {
+                        // 캐릭터와 맨해튼 거리 기준 2청크(20칸) 이상 떨어진 산만 추출
+                        let dist = Math.abs(x - character.x) + Math.abs(y - character.y);
+                        if(dist >= 20) validMountains.push({x, y});
+                    }
+                }
+            }
+            
+            // 2마리 스폰
+            for(let i=0; i<2; i++) {
+                if(validMountains.length > 0) {
+                    let randIdx = Math.floor(Math.random() * validMountains.length);
+                    let pos = validMountains[randIdx];
+                    enemies.push({ x: pos.x, y: pos.y, hp: 20, atk: 2, vision: 7 });
+                }
+            }
+        }
     }
 
     function updateDayNightCycle() {
@@ -358,24 +480,66 @@
         document.getElementById('viewport-container').style.backgroundColor = bgColor;
     }
 
-    function moveCharacter() {
-        let dirs = [[0,1], [0,-1], [1,0], [-1,0]];
-        dirs.sort(() => Math.random() - 0.5); // 랜덤 섞기
+// [수정] 행위 선택기 (수면 회복량 버프 및 사망 체크 추가)
+// [수정] 행동 선택 AI (물 마시기, 파밍 우선순위 조정)
+    function executeCharacterAI() {
+        let st = character.stats;
+        if (st.hp <= 0) return;
 
-        for (let d of dirs) {
-            let nx = character.x + d[0];
-            let ny = character.y + d[1];
-            
-            // 맵 밖으로 나가거나 산/강이면 이동 불가
-            if (nx >= 0 && nx < MAP_SIZE && ny >= 0 && ny < MAP_SIZE) {
-                let type = mapGrid[ny][nx].type;
-                if (type !== 'mountain' && type !== 'river') {
-                    character.x = nx;
-                    character.y = ny;
-                    break; // 한 칸 이동 후 종료
+        // [추가] 갈증 90 이상이면 '매 턴(400ms)'마다 HP 1씩 깎임
+        if (st.thirst >= 90) {
+            st.hp -= 1;
+            if (st.hp <= 0) return; // 깎여서 사망 시 이번 턴 행동 중지
+        }
+
+        if (st.actionTimer > 0) {
+            st.actionTimer--;
+            if (st.actionTimer === 0) {
+                if (st.currentState === 'SLEEPING_IN') { st.hunger += 1; st.fatigue = Math.max(0, st.fatigue - 15); st.sleepDuration += 10; }
+                if (st.currentState === 'SLEEPING_OUT') { st.hunger += 1; st.fatigue = Math.max(0, st.fatigue - 10); st.sleepDuration += 10; }
+                if (st.currentState === 'RESTING') { st.hunger += 1; st.fatigue = Math.max(0, st.fatigue - 5); }
+                
+                if ((st.currentState === 'SLEEPING_IN' || st.currentState === 'SLEEPING_OUT') && st.sleepDuration < 70) {
+                    let enemyVisible = enemies.some(en => Math.abs(en.x - character.x) + Math.abs(en.y - character.y) <= 3); 
+                    // [수정] 목마르면 잠에서 깨도록 조건 추가
+                    if (!enemyVisible && st.hunger < 90 && st.thirst < 90) { 
+                        st.actionTimer = 10; return;
+                    }
+                }
+                st.currentState = 'IDLE';
+                st.sleepDuration = 0;
+            }
+            return;
+        }
+
+        let candidates = [];
+        let enemyVisible = enemies.some(en => Math.abs(en.x - character.x) + Math.abs(en.y - character.y) <= 7);
+
+        // [행동 우선순위 풀]
+        // 💡 팁: '식량 버리기' 나 '물 버리기'가 들어간 이유는 가방이 꽉 찼을 때 파밍을 시도하기 위함입니다!
+        if (enemyVisible) { candidates = ['도망치기', '공격']; } 
+        else if (st.thirst > 90) { candidates = ['물마시기', '강 찾기', '식량 버리기', '물파밍', '노상수면', '대기']; } 
+        else if (st.hunger > 90) { candidates = ['식사', '건물 찾기', '물 버리기', '식량파밍', '노상수면', '대기']; } 
+        else if (st.thirst > 50) { candidates = ['물마시기', '강 찾기', '식량 버리기', '물파밍', '대기']; } 
+        else if (st.hunger > 50) { candidates = ['식사', '건물 찾기', '물 버리기', '식량파밍', '대기']; } 
+        else if (st.hunger <= 10 && st.thirst <= 10) { candidates = ['식량 버리기', '물 버리기', '돌아다니기', '대기']; } 
+        else if (st.fatigue > 50) { candidates = ['건물 찾기', '수면', '노상수면']; } 
+        else if (st.fatigue <= 50) { candidates = ['휴식', '돌아다니기', '대기']; } 
+        else { candidates = ['돌아다니기', '대기']; } 
+
+// 3. 조건이 맞는 가장 앞의 행위 실행
+        for (let actName of candidates) {
+            if (ACTIONS[actName] && ACTIONS[actName].canExecute()) {
+                // [버그 픽스] 행동을 시도해보고, false가 떨어지면 포기하고 다음 우선순위 행동을 찾음
+                let success = ACTIONS[actName].execute(); 
+                if (success !== false) {
+                    return; // 행동을 무사히 마쳤으면 턴 종료
                 }
             }
         }
+        
+        // 위에서 뭘 하려다 다 실패했거나 할 게 없으면 무조건 돌아다님
+        ACTIONS['돌아다니기'].execute();
     }
 
     function updateCamera() {
@@ -424,15 +588,210 @@
         }
     }
 
-// [수정] 맵 헬퍼 함수: 이제 텍스트(name)뿐만 아니라 객체(데이터)도 통째로 타일에 저장 가능
+    let character = { x: 0, y: 0, emoji: '🥰', stats: createEntityStats(50, 1, 4) };
+
+// [추가 및 수정] 행위 목록 사전
+    const ACTIONS = {
+        // ... (돌아다니기, 건물 찾기 등 기존 내용 유지) ...
+        '돌아다니기': {
+            canExecute: () => true,
+            execute: () => {
+                let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(() => Math.random() - 0.5); 
+                for (let d of dirs) {
+                    let nx = character.x + d[0], ny = character.y + d[1];
+                    let type = getTile(nx, ny).type;
+                    if (type !== 'mountain' && type !== 'river' && type !== 'out') {
+                        character.x = nx; character.y = ny;
+                        character.stats.movesInInterval++; break;
+                    }
+                }
+            }
+        },
+// [수정] 건물을 찾지 못하면 false를 반환하여 다른 행동을 유도함
+        '건물 찾기': {
+            canExecute: () => getTile(character.x, character.y).type !== 'building',
+            execute: () => {
+                let next = getNextStepBFS(character.x, character.y, null, null, 'building');
+                if (next) { 
+                    character.x = next.x; character.y = next.y; 
+                    character.stats.movesInInterval++; 
+                    return true; 
+                }
+                return false; // 실패!
+            }
+        },
+        // [수정] 강을 찾지 못하면 false를 반환
+        '강 찾기': {
+            canExecute: () => ![[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(character.x+d[0], character.y+d[1]).type === 'river'),
+            execute: () => {
+                let next = getNextStepBFS(character.x, character.y, null, null, 'river_adjacent');
+                if (next) { 
+                    character.x = next.x; character.y = next.y; 
+                    character.stats.movesInInterval++; 
+                    return true; 
+                }
+                return false; // 실패!
+            }
+        },
+        // [수정] 통합 가방 체크
+        '식량파밍': {
+            canExecute: () => {
+                let t = getTile(character.x, character.y);
+                let totalItems = character.stats.inventory.food + character.stats.inventory.water;
+                return t.type === 'building' && t.food > 0 && totalItems < character.stats.weightLimit;
+            },
+            execute: () => { getTile(character.x, character.y).food--; character.stats.inventory.food++; }
+        },
+        // [추가] 물 파밍
+        '물파밍': {
+            canExecute: () => {
+                let isNearRiver = [[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(character.x+d[0], character.y+d[1]).type === 'river');
+                let totalItems = character.stats.inventory.food + character.stats.inventory.water;
+                return isNearRiver && totalItems < character.stats.weightLimit;
+            },
+            execute: () => { character.stats.inventory.water++; }
+        },
+        '식사': {
+            canExecute: () => character.stats.inventory.food > 0,
+            execute: () => { character.stats.inventory.food--; character.stats.hunger = Math.max(0, character.stats.hunger - 8); }
+        },
+        // [추가] 물 마시기 (갈증 40 감소)
+        '물마시기': {
+            canExecute: () => character.stats.inventory.water > 0,
+            execute: () => { character.stats.inventory.water--; character.stats.thirst = Math.max(0, character.stats.thirst - 40); }
+        },
+        // [추가] 물 버리기 (가방 공간 비우기용)
+        '물 버리기': {
+            canExecute: () => character.stats.inventory.water > 0,
+            execute: () => { character.stats.inventory.water--; }
+        },
+        '식량 버리기': {
+            canExecute: () => character.stats.inventory.food > 0,
+            execute: () => {
+                character.stats.inventory.food--;
+                getTile(character.x, character.y).droppedFood = (getTile(character.x, character.y).droppedFood || 0) + 1;
+            }
+        },
+        '수면': {
+            canExecute: () => getTile(character.x, character.y).type === 'building',
+            execute: () => { character.stats.currentState = 'SLEEPING_IN'; character.stats.actionTimer = 10; }
+        },
+        '노상수면': {
+            canExecute: () => getTile(character.x, character.y).type !== 'building',
+            execute: () => { character.stats.currentState = 'SLEEPING_OUT'; character.stats.actionTimer = 10; }
+        },
+        '휴식': {
+            canExecute: () => true,
+            execute: () => { character.stats.currentState = 'RESTING'; character.stats.actionTimer = 10; }
+        },
+        '대기': { canExecute: () => true, execute: () => {} },
+        '도망치기': { canExecute: () => true, execute: () => { ACTIONS['돌아다니기'].execute(); } },
+        '공격': {
+            canExecute: () => true,
+            execute: () => {
+                let target = enemies.find(en => en.x === character.x && en.y === character.y);
+                if (target) { target.hp -= character.stats.atk; character.stats.currentState = 'STUNNED'; character.stats.actionTimer = 2; }
+            }
+        }
+    };
+
+// [수정] setTile 함수: 떨어진 식량(droppedFood) 기본값 추가
     function setTile(x, y, type, extraData = {}) {
         if (x >= 0 && x < MAP_SIZE && y >= 0 && y < MAP_SIZE) {
             if (typeof extraData === 'string') {
-                mapGrid[y][x] = { type: type, name: extraData };
+                mapGrid[y][x] = { type: type, name: extraData, droppedFood: 0 };
             } else {
-                mapGrid[y][x] = { type: type, ...extraData };
+                mapGrid[y][x] = { type: type, droppedFood: 0, ...extraData };
             }
         }
+    }
+
+// [수정] 적군 독립 타이머 (370ms) - 회피 기동 및 공격 로직
+    function enemyTick() {
+        if (isPaused) return;
+
+        // 사망한 적 제거
+        enemies = enemies.filter(en => en.hp > 0);
+
+        enemies.forEach(en => {
+            if (en.stun > 0) { en.stun--; return; } // 공격 후 기절 상태
+
+            let dist = Math.abs(en.x - character.x) + Math.abs(en.y - character.y);
+            
+            // [공격 로직] 캐릭터와 겹쳤고, 캐릭터가 건물 타일 위가 아닐 때!
+            if (en.x === character.x && en.y === character.y && getTile(character.x, character.y).type !== 'building') {
+                character.stats.hp -= en.atk;
+                en.stun = 2; // 적 2턴 기절
+                return;
+            }
+
+            // [이동 로직] 
+            en.moveCounter = (en.moveCounter || 0) + 1;
+            
+            if (dist <= en.vision) {
+                // 3번에 1번은 엉뚱한 방향으로 이동 (자연스러운 동선)
+                if (en.moveCounter % 3 === 0) {
+                    let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(()=> Math.random()-0.5);
+                    for(let d of dirs) {
+                        let nx = en.x+d[0], ny = en.y+d[1];
+                        if (nx>=0 && nx<MAP_SIZE && ny>=0 && ny<MAP_SIZE && getTile(nx, ny).type !== 'river') {
+                            en.x = nx; en.y = ny; break;
+                        }
+                    }
+                } else {
+                    // 정상 추적
+                    let next = getNextStepBFS(en.x, en.y, character.x, character.y);
+                    if (next) { en.x = next.x; en.y = next.y; }
+                }
+            } else {
+                let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(()=> Math.random()-0.5);
+                for (let d of dirs) {
+                    let nx = en.x + d[0], ny = en.y + d[1];
+                    if (nx >= 0 && nx < MAP_SIZE && ny >= 0 && ny < MAP_SIZE && getTile(nx, ny).type !== 'river') {
+                        en.x = nx; en.y = ny; break;
+                    }
+                }
+            }
+        });
+        render(); 
+    }
+
+// [수정] BFS 목표물 추가 지원 (river_adjacent)
+    function getNextStepBFS(startX, startY, targetX, targetY, targetType = null) {
+        let queue = [{ x: startX, y: startY, path: [] }];
+        let visited = new Set([`${startX},${startY}`]);
+        let dirs = [[0,1], [0,-1], [1,0], [-1,0]]; 
+
+        while (queue.length > 0) {
+            let curr = queue.shift();
+            
+            if (targetType) {
+                // [핵심 로직] 목표가 '강가'일 경우, 현재 내 타일 주변 1칸에 강이 있는지 검사
+                if (targetType === 'river_adjacent') {
+                    let isNearRiver = dirs.some(d => getTile(curr.x+d[0], curr.y+d[1]).type === 'river');
+                    if (isNearRiver) return curr.path.length > 0 ? curr.path[0] : null;
+                } 
+                else if (getTile(curr.x, curr.y).type === targetType) {
+                    return curr.path.length > 0 ? curr.path[0] : null;
+                }
+            } else {
+                if (curr.x === targetX && curr.y === targetY) return curr.path.length > 0 ? curr.path[0] : null;
+            }
+            
+            if (curr.path.length > 10) continue; 
+
+            for (let d of dirs) {
+                let nx = curr.x + d[0], ny = curr.y + d[1];
+                if (nx >= 0 && nx < MAP_SIZE && ny >= 0 && ny < MAP_SIZE) {
+                    if (mapGrid[ny][nx].type !== 'river' && !visited.has(`${nx},${ny}`)) {
+                        visited.add(`${nx},${ny}`);
+                        let step = curr.path.length === 0 ? {x: nx, y: ny} : curr.path[0];
+                        queue.push({ x: nx, y: ny, path: [step] });
+                    }
+                }
+            }
+        }
+        return null; 
     }
 
     function getTile(x, y) {
@@ -589,12 +948,28 @@ function generateRiver() {
         }
     }
 
+// [수정] UI 업데이트 로직 (상태 텍스트 추가)
     function updateStatusUI() {
         document.getElementById('stat-hp').innerText = character.stats.hp;
         document.getElementById('stat-atk').innerText = character.stats.atk;
         document.getElementById('stat-hunger').innerText = character.stats.hunger;
+        document.getElementById('stat-thirst').innerText = character.stats.thirst; // 추가
         document.getElementById('stat-fatigue').innerText = character.stats.fatigue;
-        document.getElementById('stat-bag').innerText = character.stats.inventory.food;
+        
+        let totalItems = character.stats.inventory.food + character.stats.inventory.water;
+        document.getElementById('stat-bag').innerText = totalItems;
+
+        // [추가] 부여된 특성 이름 가져오기
+        let traitName = character.stats.traits.length > 0 ? character.stats.traits[0].name : '없음';
+
+        const stateKo = { 'IDLE': '대기', 'SLEEPING_IN': '수면', 'SLEEPING_OUT': '노상수면', 'RESTING': '휴식', 'STUNNED': '기절' };
+        let currentAction = '행동 중';
+        if (character.stats.hp <= 0) currentAction = '사망 ☠️';
+        else if (character.stats.actionTimer > 0) currentAction = stateKo[character.stats.currentState] || '행동 중';
+        else currentAction = '돌아다니기';
+
+        // [수정] 상태 표시 형식: 🥰 트윈테일 [상태: 돌아다니기] [특성: 미소녀]
+        document.getElementById('status-title').innerText = `🥰 트윈테일 [상태: ${currentAction}] [특성: ${traitName}]`;
     }
 
     function render() {
@@ -626,9 +1001,22 @@ function generateRiver() {
                     if (getTile(mx + 1, my).bName !== cell.bName) el.style.borderRight = '2px solid rgba(0,0,0,0.8)';
                 }
                 
-                // 캐릭터 렌더링
+                // 적 렌더링
+                let enemyInCell = enemies.find(en => en.x === mx && en.y === my);
+                if (enemyInCell) {
+                    el.innerHTML += `<span class="char" style="z-index:15;">👹</span>`;
+                }
+                
+                // 땅에 떨어진 식량 렌더링 (1/4 크기)
+                if (cell.droppedFood > 0) {
+                    el.innerHTML += `<span class="dropped-food">🍖</span>`;
+                }
+
+                // 캐릭터 렌더링 (적보다 위에 그려짐)
                 if (character.x === mx && character.y === my) {
-                    el.innerHTML += `<span class="char">${character.emoji}</span>`;
+                    let displayEmoji = character.stats.hp <= 0 ? '☠️' : character.emoji;
+                    // 🚨 수정됨: ${character.emoji} 대신 ${displayEmoji}를 출력하도록 변경
+                    el.innerHTML += `<span class="char" style="z-index:20;">${displayEmoji}</span>`;
                 }
             }
         }
