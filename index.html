@@ -780,7 +780,7 @@
 
     let character = { x: 0, y: 0, emoji: '🥰', stats: createEntityStats(50, 1, 4) };
 
-// [수정] 어떤 캐릭터(ent)든 받아서 행동하게 끔 리팩토링된 ACTIONS 사전
+// [수정] 모든 행위에 상태(currentState)와 1턴 타이머 부여
     const ACTIONS = {
         '돌아다니기': {
             canExecute: (ent) => true,
@@ -793,11 +793,13 @@
                         ent.x = nx; ent.y = ny; ent.stats.movesInInterval++; break;
                     }
                 }
+                ent.stats.currentState = 'WANDERING'; ent.stats.actionTimer = 1;
             }
         },
         '건물 찾기': {
             canExecute: (ent) => getTile(ent.x, ent.y).type !== 'building',
             execute: (ent) => {
+                ent.stats.currentState = 'FIND_BUILDING'; ent.stats.actionTimer = 1;
                 let next = getNextStepBFS(ent.x, ent.y, null, null, 'building');
                 if (next) { ent.x = next.x; ent.y = next.y; ent.stats.movesInInterval++; return true; }
                 return false; 
@@ -806,6 +808,7 @@
         '강 찾기': {
             canExecute: (ent) => ![[0,1],[0,-1],[1,0],[-1,0]].some(d => getTile(ent.x+d[0], ent.y+d[1]).type === 'river'),
             execute: (ent) => {
+                ent.stats.currentState = 'FIND_RIVER'; ent.stats.actionTimer = 1;
                 let next = getNextStepBFS(ent.x, ent.y, null, null, 'river_adjacent');
                 if (next) { ent.x = next.x; ent.y = next.y; ent.stats.movesInInterval++; return true; }
                 return false; 
@@ -817,7 +820,10 @@
                 let totalItems = ent.stats.inventory.food + ent.stats.inventory.water;
                 return t.type === 'building' && t.food > 0 && totalItems < ent.stats.weightLimit;
             },
-            execute: (ent) => { getTile(ent.x, ent.y).food--; ent.stats.inventory.food++; }
+            execute: (ent) => { 
+                getTile(ent.x, ent.y).food--; ent.stats.inventory.food++; 
+                ent.stats.currentState = 'FARM_FOOD'; ent.stats.actionTimer = 1;
+            }
         },
         '물파밍': {
             canExecute: (ent) => {
@@ -825,25 +831,38 @@
                 let totalItems = ent.stats.inventory.food + ent.stats.inventory.water;
                 return isNearRiver && totalItems < ent.stats.weightLimit;
             },
-            execute: (ent) => { ent.stats.inventory.water++; }
+            execute: (ent) => { 
+                ent.stats.inventory.water++; 
+                ent.stats.currentState = 'FARM_WATER'; ent.stats.actionTimer = 1;
+            }
         },
         '식사': {
             canExecute: (ent) => ent.stats.inventory.food > 0,
-            execute: (ent) => { ent.stats.inventory.food--; ent.stats.hunger = Math.max(0, ent.stats.hunger - 8); }
+            execute: (ent) => { 
+                ent.stats.inventory.food--; ent.stats.hunger = Math.max(0, ent.stats.hunger - 8); 
+                ent.stats.currentState = 'EAT'; ent.stats.actionTimer = 1;
+            }
         },
         '물마시기': {
             canExecute: (ent) => ent.stats.inventory.water > 0,
-            execute: (ent) => { ent.stats.inventory.water--; ent.stats.thirst = Math.max(0, ent.stats.thirst - 40); }
+            execute: (ent) => { 
+                ent.stats.inventory.water--; ent.stats.thirst = Math.max(0, ent.stats.thirst - 40); 
+                ent.stats.currentState = 'DRINKING'; ent.stats.actionTimer = 1;
+            }
         },
         '물 버리기': {
             canExecute: (ent) => ent.stats.inventory.water > 0,
-            execute: (ent) => { ent.stats.inventory.water--; }
+            execute: (ent) => { 
+                ent.stats.inventory.water--; 
+                ent.stats.currentState = 'DROP_WATER'; ent.stats.actionTimer = 1;
+            }
         },
         '식량 버리기': {
             canExecute: (ent) => ent.stats.inventory.food > 0,
             execute: (ent) => {
                 ent.stats.inventory.food--;
                 getTile(ent.x, ent.y).droppedFood = (getTile(ent.x, ent.y).droppedFood || 0) + 1;
+                ent.stats.currentState = 'DROP_FOOD'; ent.stats.actionTimer = 1;
             }
         },
         '수면': {
@@ -858,13 +877,22 @@
             canExecute: (ent) => true,
             execute: (ent) => { ent.stats.currentState = 'RESTING'; ent.stats.actionTimer = 10; }
         },
-        '대기': { canExecute: (ent) => true, execute: (ent) => {} },
-        '도망치기': { canExecute: (ent) => true, execute: (ent) => { ACTIONS['돌아다니기'].execute(ent); } },
+        '대기': { 
+            canExecute: (ent) => true, 
+            execute: (ent) => { ent.stats.currentState = 'IDLE'; ent.stats.actionTimer = 1; } 
+        },
+        '도망치기': { 
+            canExecute: (ent) => true, 
+            execute: (ent) => { 
+                ACTIONS['돌아다니기'].execute(ent); 
+                ent.stats.currentState = 'FLEEING'; // 돌아다니기에서 덮어씌움
+            } 
+        },
         '공격': {
             canExecute: (ent) => true,
             execute: (ent) => {
                 let target = enemies.find(en => en.x === ent.x && en.y === ent.y);
-                if (target) { target.hp -= ent.stats.atk; ent.stats.currentState = 'STUNNED'; ent.stats.actionTimer = 2; }
+                if (target) { target.hp -= ent.stats.atk; ent.stats.currentState = 'ATTACKING'; ent.stats.actionTimer = 2; }
             }
         }
     };
@@ -880,30 +908,50 @@
         }
     }
 
-// [수정] 적군 독립 타이머 (370ms) - 회피 기동 및 공격 로직
+// [수정] 적군 독립 타이머 - 시체 무시 및 가장 가까운 생존자 추적 로직 적용
     function enemyTick() {
         if (isPaused) return;
 
-        // 사망한 적 제거
         enemies = enemies.filter(en => en.hp > 0);
 
         enemies.forEach(en => {
-            if (en.stun > 0) { en.stun--; return; } // 공격 후 기절 상태
+            if (en.stun > 0) { en.stun--; return; }
 
-            let dist = Math.abs(en.x - character.x) + Math.abs(en.y - character.y);
-            
-            // [공격 로직] 캐릭터와 겹쳤고, 캐릭터가 건물 타일 위가 아닐 때!
-            if (en.x === character.x && en.y === character.y && getTile(character.x, character.y).type !== 'building') {
-                character.stats.hp -= en.atk;
-                en.stun = 2; // 적 2턴 기절
+            // 1. 살아있는 타겟(트윈테일 + NPC) 배열 생성
+            let aliveTargets = [character, ...npcs].filter(t => t.stats.hp > 0);
+            let closestTarget = null;
+            let minDist = Infinity;
+
+            // 2. 가장 가까운 사냥감 찾기
+            aliveTargets.forEach(t => {
+                let d = Math.abs(en.x - t.x) + Math.abs(en.y - t.y);
+                if (d < minDist) { minDist = d; closestTarget = t; }
+            });
+
+            // 3. 맵에 살아있는 놈이 하나도 없으면 그냥 랜덤 배회
+            if (!closestTarget) {
+                let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(()=> Math.random()-0.5);
+                for(let d of dirs) {
+                    let nx = en.x+d[0], ny = en.y+d[1];
+                    if (nx>=0 && nx<MAP_SIZE && ny>=0 && ny<MAP_SIZE && getTile(nx, ny).type !== 'river') {
+                        en.x = nx; en.y = ny; break;
+                    }
+                }
                 return;
             }
 
-            // [이동 로직] 
+            let dist = minDist;
+
+            // 4. 공격 로직 (가장 가까운 사냥감과 겹쳤을 때)
+            if (en.x === closestTarget.x && en.y === closestTarget.y && getTile(closestTarget.x, closestTarget.y).type !== 'building') {
+                closestTarget.stats.hp -= en.atk;
+                en.stun = 2; 
+                return;
+            }
+
+            // 5. 이동 및 추적 로직
             en.moveCounter = (en.moveCounter || 0) + 1;
-            
             if (dist <= en.vision) {
-                // 3번에 1번은 엉뚱한 방향으로 이동 (자연스러운 동선)
                 if (en.moveCounter % 3 === 0) {
                     let dirs = [[0,1], [0,-1], [1,0], [-1,0]].sort(()=> Math.random()-0.5);
                     for(let d of dirs) {
@@ -913,8 +961,7 @@
                         }
                     }
                 } else {
-                    // 정상 추적
-                    let next = getNextStepBFS(en.x, en.y, character.x, character.y);
+                    let next = getNextStepBFS(en.x, en.y, closestTarget.x, closestTarget.y);
                     if (next) { en.x = next.x; en.y = next.y; }
                 }
             } else {
@@ -1134,16 +1181,24 @@ function generateRiver() {
         document.getElementById('stat-bag').innerText = totalItems;
 
         let traitName = character.stats.traits.length > 0 ? character.stats.traits[0].name : '없음';
-        const stateKo = { 'IDLE': '대기', 'SLEEPING_IN': '수면', 'SLEEPING_OUT': '노상수면', 'RESTING': '휴식', 'STUNNED': '기절' };
+        const stateKo = { 
+            'IDLE': '대기', 'SLEEPING_IN': '수면', 'SLEEPING_OUT': '노상수면', 
+            'RESTING': '휴식', 'STUNNED': '기절',
+            'DRINKING': '물 마시는 중', 'EAT': '식사 중',
+            'WANDERING': '돌아다니기', 'FIND_BUILDING': '건물 찾는 중',
+            'FIND_RIVER': '강 찾는 중', 'FARM_FOOD': '식량 파밍 중',
+            'FARM_WATER': '물 뜨는 중', 'DROP_FOOD': '식량 버림',
+            'DROP_WATER': '물 버림', 'FLEEING': '도망치는 중 💦',
+            'ATTACKING': '공격 중 ⚔️'
+        };
         
-        let currentAction = '행동 중';
+        let currentAction = '대기';
         if (character.stats.hp <= 0) currentAction = '사망 ☠️';
         else if (character.stats.actionTimer > 0) currentAction = stateKo[character.stats.currentState] || '행동 중';
-        else currentAction = '돌아다니기';
 
-        // 연령 성별 추가 표기
+        // 연령 성별 추가 표기 (이전 줄바꿈 UI 유지)
         let infoStr = `(${character.stats.gender}, ${character.stats.age}세)`;
-        document.getElementById('status-title').innerHTML = `🥰 트윈테일 ${infoStr} [특성: ${traitName}] <br> [상태: ${currentAction}]</span>`;
+        document.getElementById('status-title').innerHTML = `🥰 트윈테일 ${infoStr} [특성: ${traitName}]<br>[상태: ${currentAction}]</span>`;
     }
 
 // [수정/복구] 모든 그래픽을 화면에 띄우는 완전한 렌더링 함수
